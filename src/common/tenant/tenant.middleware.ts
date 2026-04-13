@@ -6,6 +6,10 @@ export class TenantMiddleware implements NestMiddleware {
   constructor(private prisma: PrismaService) {}
 
   async use(req: any, res: any, next: () => void) {
+    
+      if (req.path === '/health' || req.path === '/api/health') {
+    return next();
+  }
     const slug = req.headers['x-tenant-slug'];
 
     /**
