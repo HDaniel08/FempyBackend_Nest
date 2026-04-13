@@ -1,0 +1,379 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+////////////////////////////////////
+// ENUMS
+////////////////////////////////////
+enum DailyQuestionType {
+  SINGLE_CHOICE_5
+}
+
+enum DailyQuestionScheduleType {
+  MANUAL
+  CRON
+  ONE_TIME
+}
+
+enum DailyQuestionAudienceType {
+  ALL
+  POSITION
+  DEPARTMENT
+  GROUP
+  ACTIVITY
+  CUSTOM
+}
+////////////////////////////////////
+// MODELS
+////////////////////////////////////
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  users      User[]
+  settings   OrganizationSettings?
+  positions  Position[]
+  devices    UserDevice[]
+  moods      DailyMood[]
+  activities ActivityEvent[]
+  notifJobs  NotificationJob[]
+  profiles   UserProfile[]
+
+  userGoals               UserGoal[]
+  dailyQuestions          DailyQuestion[]
+  dailyQuestionAnswers    DailyQuestionnaireAnswer[]
+  dailyQuestionSchedules  DailyQuestionSchedule[]
+  dailyQuestionDispatches DailyQuestionDispatch[]
+
+  @@map("tenants")
+}
+
+model OrganizationSettings {
+  tenantId String @id @map("tenant_id")
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  orgName        String  @map("org_name")
+  companyForm    String  @map("company_form")
+  taxNumber      String? @map("tax_number")
+  companyAddress String? @map("company_address")
+
+  workDays  Json?     @map("work_days")
+  workStart DateTime? @map("work_start") @db.Time
+  workEnd   DateTime? @map("work_end") @db.Time
+
+  companyGoals String? @map("company_goals")
+
+  notifyEmail       Boolean   @default(false) @map("notify_email")
+  notifyPush        Boolean   @default(false) @map("notify_push")
+  notifyWorkdayOnly Boolean   @default(false) @map("notify_workday_only")
+  notifyStart       DateTime? @map("notify_start") @db.Time
+  notifyEnd         DateTime? @map("notify_end") @db.Time
+
+  defaultLang String @default("hu") @map("default_lang")
+  themeMode   String @default("light") @map("theme_mode")
+  timeZone    String @default("Europe/Budapest") @map("time_zone")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  @@map("organization_settings")
+}
+
+model Position {
+  id       String @id @default(uuid())
+  tenantId String @map("tenant_id")
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  name     String
+  parentId String?    @map("parent_id")
+  parent   Position?  @relation("PositionTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children Position[] @relation("PositionTree")
+
+  isDeleted Boolean  @default(false) @map("is_deleted")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  users User[]
+
+  @@unique([tenantId, name, parentId])
+  @@index([tenantId])
+  @@index([tenantId, parentId])
+  @@map("positions")
+}
+
+model User {
+  id       String @id @default(uuid())
+  tenantId String @map("tenant_id")
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  firstName    String @map("first_name")
+  lastName     String @map("last_name")
+  email        String @unique
+  passwordHash String @map("password_hash")
+
+  positionId String?   @map("position_id")
+  position   Position? @relation(fields: [positionId], references: [id], onDelete: SetNull)
+
+  isLeader  Boolean @default(false) @map("is_leader")
+  isDeleted Boolean @default(false) @map("is_deleted")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  profile    UserProfile?
+  devices    UserDevice[]
+  moods      DailyMood[]
+  activities ActivityEvent[]
+  answers    DailyQuestionnaireAnswer[]
+  notifJobs  NotificationJob[]
+  userGoals  UserGoal[]
+
+  @@index([tenantId])
+  @@index([tenantId, positionId])
+  @@map("users")
+}
+
+model UserProfile {
+  userId   String @id @map("user_id")
+  tenantId String @map("tenant_id")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  nickname    String?
+  isAnonymous Boolean   @default(false) @map("is_anonymous")
+  birthday    DateTime? @db.Date
+  gender      Int?
+  dateOfStart DateTime? @map("date_of_start") @db.Date
+  description String?
+  isPublic    Boolean   @default(true) @map("is_public")
+  onHoliday   Boolean   @default(false) @map("on_holiday")
+
+  lessNotification  Boolean @default(false) @map("less_notification")
+  emailNotification Boolean @default(false) @map("email_notification")
+  dailyNotification Boolean @default(true) @map("daily_notification")
+  profilePic        String  @default("1") @map("profile_pic")
+  profilePicUrl     String? @map("profile_pic_url")
+
+  @@index([tenantId])
+  @@map("user_profile")
+}
+
+model UserGoal {
+  id       String @id @default(uuid())
+  tenantId String @map("tenant_id")
+  userId   String @map("user_id")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  text  String
+  order Int    @default(0)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId, userId])
+  @@map("user_goals")
+}
+
+model DailyMood {
+  id       String @id @default(uuid())
+  tenantId String @map("tenant_id")
+  userId   String @map("user_id")
+
+  // A nap, amire vonatkozik (UTC nap, vagy a te standardod szerint)
+  date DateTime @db.Date
+
+  mood    Int
+  comment String? @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId, date])
+  @@index([tenantId, date])
+  @@map("daily_mood")
+}
+
+model DailyQuestion {
+  id       String  @id @default(uuid())
+  tenantId String? @map("tenant_id")
+  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  topic         String
+  question      String
+  answerOptions Json     @map("answer_options")
+  type          DailyQuestionType
+  isActive      Boolean  @default(true) @map("is_active")
+  isGlobal      Boolean  @default(false) @map("is_global")
+  hungarianNorm Decimal? @map("hungarian_norm") @db.Decimal(5, 2)
+  hungarianStd  Decimal? @map("hungarian_std") @db.Decimal(5, 2)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  answers   DailyQuestionnaireAnswer[]
+  schedules DailyQuestionSchedule[]
+
+  dispatches DailyQuestionDispatch[]
+
+  @@index([tenantId])
+  @@index([isActive])
+  @@index([isGlobal])
+  @@map("daily_questions")
+}
+
+model DailyQuestionSchedule {
+  id       String  @id @default(uuid())
+  tenantId String? @map("tenant_id")
+  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  questionId String        @map("question_id")
+  question   DailyQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  name                    String?
+  isActive                Boolean @default(true) @map("is_active")
+  isDefaultWeekdayMorning Boolean @default(false) @map("is_default_weekday_morning")
+
+  scheduleType DailyQuestionScheduleType    @map("schedule_type")
+  cronExpr     String?   @map("cron_expr")
+  runAt        DateTime? @map("run_at")
+
+  audienceType   DailyQuestionAudienceType  @map("audience_type")
+  audienceConfig Json?  @map("audience_config")
+
+  pushTitle String? @map("push_title")
+  pushBody  String? @map("push_body")
+
+  lastTriggeredAt DateTime? @map("last_triggered_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  dispatches DailyQuestionDispatch[]
+
+  @@index([tenantId, isActive])
+  @@index([questionId])
+  @@index([scheduleType])
+  @@index([runAt])
+  @@map("daily_question_schedules")
+}
+
+model DailyQuestionDispatch {
+  id       String  @id @default(uuid())
+  tenantId String? @map("tenant_id")
+  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  questionId String        @map("question_id")
+  question   DailyQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  scheduleId String?                @map("schedule_id")
+  schedule   DailyQuestionSchedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+
+  triggeredByUserId String?  @map("triggered_by_user_id")
+  sentOn            DateTime @map("sent_on") @db.Date
+  sentAt            DateTime @map("sent_at")
+
+  audienceType   String @default("ALL") @map("audience_type")
+  audienceConfig Json?  @map("audience_config")
+
+  pushSent  Boolean @default(false) @map("push_sent")
+  pushTitle String? @map("push_title")
+  pushBody  String? @map("push_body")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  answers DailyQuestionnaireAnswer[]
+
+  @@index([tenantId, sentOn])
+  @@index([questionId])
+  @@index([scheduleId])
+  @@map("daily_question_dispatches")
+}
+
+model DailyQuestionnaireAnswer {
+  id         String @id @default(uuid())
+  tenantId   String @map("tenant_id")
+  userId     String @map("user_id")
+  questionId String @map("question_id")
+  dispatchId String @map("dispatch_id")
+
+  answer    String?
+  isActive  Boolean   @default(true) @map("is_active")
+  sentOn    DateTime  @map("sent_on") @db.Date
+  filledAt  DateTime? @map("filled_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  tenant   Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user     User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question DailyQuestion         @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  dispatch DailyQuestionDispatch @relation(fields: [dispatchId], references: [id], onDelete: Cascade)
+
+  @@unique([dispatchId, userId])
+  @@index([tenantId, userId, sentOn])
+  @@index([tenantId, questionId])
+  @@index([dispatchId])
+  @@map("daily_questionnaire_answers")
+}
+
+model ActivityEvent {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  userId    String   @map("user_id")
+  event     String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([tenantId, userId, createdAt(sort: Desc)])
+  @@map("activity_events")
+}
+
+model UserDevice {
+  id         String    @id @default(uuid())
+  tenantId   String    @map("tenant_id")
+  userId     String    @map("user_id")
+  expoToken  String    @map("expo_token")
+  deviceInfo Json?     @map("device_info")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  lastSeenAt DateTime? @map("last_seen_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, expoToken])
+  @@unique([tenantId, userId, expoToken])
+  @@index([tenantId, userId])
+  @@map("user_devices")
+}
+
+model NotificationJob {
+  id       String  @id @default(uuid())
+  tenantId String  @map("tenant_id")
+  userId   String? @map("user_id")
+
+  type         String
+  payload      Json
+  scheduledFor DateTime? @map("scheduled_for")
+  status       String    @default("queued")
+  errorMessage String?   @map("error_message")
+
+  createdAt   DateTime  @default(now()) @map("created_at")
+  processedAt DateTime? @map("processed_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status, createdAt(sort: Desc)])
+  @@index([tenantId, scheduledFor])
+  @@map("notification_jobs")
+}
