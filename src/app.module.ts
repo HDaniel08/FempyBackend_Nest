@@ -13,11 +13,12 @@ import { DailyQuestionsModule } from './daily-questions/daily-questions.module';
 
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [ ConfigModule.forRoot({
       isGlobal: true, // így nem kell minden modulba importálni
-    }),PrismaModule, TenantsModule, UsersModule, AuthModule, DevicesModule, NotificationsModule,DailyMoodModule,DailyQuestionsModule,
+    }),PrismaModule, HealthModule, TenantsModule, UsersModule, AuthModule, DevicesModule, NotificationsModule,DailyMoodModule,DailyQuestionsModule,
      
     ServeStaticModule.forRoot({
       rootPath: join(process.cwd(), 'uploads'),
