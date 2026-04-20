@@ -14,6 +14,8 @@ export class TenantMiddleware implements NestMiddleware {
       '/api/health',
       '/tenants',
       '/api/tenants',
+      '/privacy',
+      '/api/privacy', 
       '/auth/login-global',
       '/api/auth/login-global',
     ];
