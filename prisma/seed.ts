@@ -1,4 +1,4 @@
-import { PrismaClient,DailyQuestionType } from '@prisma/client';
+import { PrismaClient,DailyQuestionType,UserRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 /**
@@ -130,26 +130,28 @@ async function main() {
   //    - ha az email nálad globálisan unique (javasolt), akkor where: { email: demoEmail }
   //    - ha még tenant+email unique, akkor findFirst + create/update (lent kommentben)
   const user = await prisma.user.upsert({
-    where: { email: demoEmail },
-    update: {
-      tenantId: tenant.id,
-      firstName: 'Demo',
-      lastName: 'User',
-      isLeader: true,
-      positionId: rootPosition.id,
-      passwordHash,
-      isDeleted: false,
-    },
-    create: {
-      tenantId: tenant.id,
-      email: demoEmail,
-      passwordHash,
-      firstName: 'Demo',
-      lastName: 'User',
-      isLeader: true,
-      positionId: rootPosition.id,
-    },
-  });
+  where: { email: demoEmail },
+  update: {
+    tenantId: tenant.id,
+    firstName: 'Demo',
+    lastName: 'Admin',
+    role: UserRole.ADMIN,
+    isLeader: true,
+    positionId: rootPosition.id,
+    passwordHash,
+    isDeleted: false,
+  },
+  create: {
+    tenantId: tenant.id,
+    email: demoEmail,
+    passwordHash,
+    firstName: 'Demo',
+    lastName: 'Admin',
+    role: UserRole.ADMIN,
+    isLeader: true,
+    positionId: rootPosition.id,
+  },
+});
 
   // 5) DEMO PROFIL (opcionális, de hasznos /me-hez)
   await prisma.userProfile.upsert({
@@ -172,9 +174,20 @@ async function main() {
     },
   });
 
-  console.log('✅ Tenant,Usert Seed kész!');
-  console.log('Tenant:', { id: tenant.id, slug: tenant.slug, name: tenant.name });
-  console.log('User:', { id: user.id, email: user.email, password: demoPasswordPlain, isLeader: user.isLeader });
+ console.log('✅ Tenant, User seed kész!');
+console.log('Tenant:', {
+  id: tenant.id,
+  slug: tenant.slug,
+  name: tenant.name,
+});
+
+console.log('User:', {
+  id: user.id,
+  email: user.email,
+  password: demoPasswordPlain,
+  role: user.role,
+  isLeader: user.isLeader,
+});
  for (const item of questions) {
     const existing = await prisma.dailyQuestion.findFirst({
       where: {

@@ -2,7 +2,8 @@ import { Injectable, NotFoundException,ForbiddenException, BadRequestException }
 import { PrismaService } from "../prisma/prisma.service";
 import { UpdateMyProfileDto } from "./dto/update-my-profile.dto";
 import { CreateGoalDto } from "./dto/create-goal.dto";
-import * as crypto from "crypto";
+import { UserRole } from "@prisma/client";
+import * as bcrypt from "bcrypt";
 /**
  * UsersService
  * - userCtx: a JWT-ből jön (sub, tenantId, email, isLeader...)
@@ -14,16 +15,8 @@ function isValidPresetId(v: any) {
   const s = String(v ?? "").trim();
   return ["1", "2", "3", "4", "5", "6", "7"].includes(s);
 }
-function base64url(input: Buffer | string) {
-  return Buffer.from(input)
-    .toString("base64")
-    .replace(/=/g, "")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_");
-}
-function sign(data: string, secret: string) {
-  return base64url(crypto.createHmac("sha256", secret).update(data).digest());
-}
+
+
 @Injectable()
 export class UsersService {
   
@@ -55,6 +48,7 @@ export class UsersService {
     passwordHash: string;
     firstName: string;
     lastName: string;
+    role?: UserRole;
     isLeader?: boolean;
     positionId?: string | null;
   }) {
@@ -65,6 +59,7 @@ export class UsersService {
         passwordHash: input.passwordHash,
         firstName: input.firstName,
         lastName: input.lastName,
+        role: input.role ?? UserRole.USER,
         isLeader: input.isLeader ?? false,
         positionId: input.positionId ?? null,
         // profile opcionális: később create-elhetjük együtt
@@ -236,6 +231,278 @@ async deleteMyGoal(userCtx: any, goalId: string) {
 
   await this.prisma.userGoal.delete({ where: { id: goalId } });
   return { ok: true };
+}
+
+async adminListUsers(tenantId: string) {
+  return this.prisma.user.findMany({
+    where: {
+      tenantId,
+    },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      role: true,
+      isLeader: true,
+      isDeleted: true,
+      createdAt: true,
+      updatedAt: true,
+      position: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      profile: {
+        select: {
+          nickname: true,
+          profilePic: true,
+          profilePicUrl: true,
+        },
+      },
+    },
+    orderBy: [
+      { isDeleted: "asc" },
+      { lastName: "asc" },
+      { firstName: "asc" },
+    ],
+  });
+}
+
+async adminCreateUser(
+  tenantId: string,
+  input: {
+    email: string;
+    temporaryPassword: string;
+    firstName: string;
+    lastName: string;
+    role?: UserRole;
+  },
+) {
+  const existing = await this.prisma.user.findFirst({
+    where: {
+      email: input.email,
+    },
+  });
+
+  if (existing) {
+    throw new BadRequestException("Ezzel az email címmel már létezik felhasználó.");
+  }
+
+  const passwordHash = await bcrypt.hash(input.temporaryPassword, 10);
+  return this.prisma.user.create({
+    data: {
+      tenantId,
+      email: input.email,
+      passwordHash,
+      firstName: input.firstName,
+      lastName: input.lastName,
+      role: input.role ?? UserRole.USER,
+      isLeader: input.role === UserRole.LEADER,
+      isDeleted: false,
+    },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      role: true,
+      isLeader: true,
+      isDeleted: true,
+      createdAt: true,
+    },
+  });
+}
+
+async adminUpdateUser(
+  tenantId: string,
+  userId: string,
+  input: {
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    role?: UserRole;
+  },
+) {
+  const user = await this.prisma.user.findFirst({
+    where: {
+      id: userId,
+      tenantId,
+    },
+  });
+
+  if (!user) {
+    throw new NotFoundException("User not found");
+  }
+  if (
+  input.role &&
+  user.role === "ADMIN" &&
+  input.role !== "ADMIN"
+) {
+  const activeAdminCount = await this.prisma.user.count({
+    where: {
+      tenantId,
+      role: "ADMIN",
+      isDeleted: false,
+    },
+  });
+
+  if (activeAdminCount <= 1) {
+    throw new BadRequestException(
+      "Az utolsó aktív adminisztrátor szerepköre nem módosítható.",
+    );
+  }
+}
+
+  if (input.email && input.email !== user.email) {
+    const existing = await this.prisma.user.findFirst({
+      where: {
+        email: input.email,
+        id: {
+          not: userId,
+        },
+      },
+    });
+
+    if (existing) {
+      throw new BadRequestException("Ezzel az email címmel már létezik felhasználó.");
+    }
+  }
+
+  return this.prisma.user.update({
+    where: {
+      id: userId,
+    },
+    data: {
+      firstName: input.firstName,
+      lastName: input.lastName,
+      email: input.email,
+      role: input.role,
+      isLeader: input.role ? input.role === UserRole.LEADER : undefined,
+    },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      role: true,
+      isLeader: true,
+      isDeleted: true,
+      updatedAt: true,
+    },
+  });
+}
+
+async adminSetUserDeleted(
+  tenantId: string,
+  userId: string,
+  isDeleted: boolean,
+  currentUserId?: string,
+) {
+  const user = await this.prisma.user.findFirst({
+    where: {
+      id: userId,
+      tenantId,
+    },
+  });
+
+  if (!user) {
+    throw new NotFoundException("User not found");
+  }
+
+  if (isDeleted && currentUserId && userId === currentUserId) {
+    throw new BadRequestException("Saját magadat nem deaktiválhatod.");
+  }
+
+  if (isDeleted && user.role === "ADMIN") {
+    const activeAdminCount = await this.prisma.user.count({
+      where: {
+        tenantId,
+        role: "ADMIN",
+        isDeleted: false,
+      },
+    });
+
+    if (activeAdminCount <= 1) {
+      throw new BadRequestException(
+        "Az utolsó aktív adminisztrátort nem lehet deaktiválni.",
+      );
+    }
+  }
+
+  return this.prisma.user.update({
+    where: {
+      id: userId,
+    },
+    data: {
+      isDeleted,
+    },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      role: true,
+      isLeader: true,
+      isDeleted: true,
+      updatedAt: true,
+    },
+  });
+}
+
+async adminAssignUserPosition(
+  tenantId: string,
+  userId: string,
+  positionId: string | null,
+) {
+  const user = await this.prisma.user.findFirst({
+    where: {
+      id: userId,
+      tenantId,
+      isDeleted: false,
+    },
+  });
+
+  if (!user) {
+    throw new NotFoundException("User not found");
+  }
+
+  if (positionId) {
+    const position = await this.prisma.position.findFirst({
+      where: {
+        id: positionId,
+        tenantId,
+        isDeleted: false,
+      },
+    });
+
+    if (!position) {
+      throw new NotFoundException("Position not found");
+    }
+  }
+
+  return this.prisma.user.update({
+    where: {
+      id: userId,
+    },
+    data: {
+      positionId,
+    },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      role: true,
+      position: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+  });
 }
 
  

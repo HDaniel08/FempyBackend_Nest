@@ -27,6 +27,12 @@ enum DailyQuestionAudienceType {
   ACTIVITY
   CUSTOM
 }
+enum UserRole {
+  USER
+  LEADER
+  ADMIN
+}
+
 ////////////////////////////////////
 // MODELS
 ////////////////////////////////////
@@ -116,6 +122,8 @@ model User {
   email        String @unique
   passwordHash String @map("password_hash")
 
+  role UserRole @default(USER)
+
   positionId String?   @map("position_id")
   position   Position? @relation(fields: [positionId], references: [id], onDelete: SetNull)
 
@@ -123,7 +131,7 @@ model User {
   isDeleted Boolean @default(false) @map("is_deleted")
 
   createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @default(now()) @map("updated_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   profile    UserProfile?
   devices    UserDevice[]
@@ -135,9 +143,9 @@ model User {
 
   @@index([tenantId])
   @@index([tenantId, positionId])
+  @@index([tenantId, role])
   @@map("users")
 }
-
 model UserProfile {
   userId   String @id @map("user_id")
   tenantId String @map("tenant_id")
