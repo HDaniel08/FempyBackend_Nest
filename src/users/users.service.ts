@@ -291,6 +291,7 @@ async adminCreateUser(
   }
 
   const passwordHash = await bcrypt.hash(input.temporaryPassword, 10);
+
   return this.prisma.user.create({
     data: {
       tenantId,
@@ -301,6 +302,21 @@ async adminCreateUser(
       role: input.role ?? UserRole.USER,
       isLeader: input.role === UserRole.LEADER,
       isDeleted: false,
+
+      profile: {
+        create: {
+          tenantId,
+          nickname: null,
+          isAnonymous: false,
+          isPublic: true,
+          onHoliday: false,
+          lessNotification: false,
+          emailNotification: false,
+          dailyNotification: true,
+          profilePic: "1",
+          profilePicUrl: null,
+        },
+      },
     },
     select: {
       id: true,
@@ -311,6 +327,7 @@ async adminCreateUser(
       isLeader: true,
       isDeleted: true,
       createdAt: true,
+      profile: true,
     },
   });
 }
