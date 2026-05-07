@@ -18,6 +18,8 @@ export class TenantMiddleware implements NestMiddleware {
       '/api/privacy', 
       '/auth/login-global',
       '/api/auth/login-global',
+      '/super-admin',
+      '/api/super-admin',
     ];
 
     const isOpen = openPathPrefixes.some(

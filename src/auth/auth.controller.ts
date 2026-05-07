@@ -43,6 +43,6 @@ async loginGlobal(@Body() body: LoginDto) {
   @Get('me')
   async me(@Tenant() tenant: any, @Req() req: any) {
     const user = req.user;
-    return this.users.getUserWithDetails(tenant.id, user.userId);
+    return this.users.getUserWithDetails(tenant.id, user.sub);
   }
 }

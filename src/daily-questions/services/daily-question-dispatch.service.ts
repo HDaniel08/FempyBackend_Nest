@@ -66,6 +66,7 @@ export class DailyQuestionDispatchService {
     tenantId,
     questionId: schedule.questionId,
     scheduleId: schedule.id,
+    campaignKey: schedule.campaignKey,
     triggeredByUserId: dto.triggeredByUserId || userId,
     sentOn,
     sentAt: new Date(),

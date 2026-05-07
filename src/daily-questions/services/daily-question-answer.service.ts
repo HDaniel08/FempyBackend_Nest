@@ -68,6 +68,7 @@ export class DailyQuestionAnswerService {
       },
       include: {
         question: true,
+        dispatch: { include: { schedule: true } },
       },
     });
 
@@ -87,16 +88,59 @@ export class DailyQuestionAnswerService {
       throw new BadRequestException('Érvénytelen válaszopció.');
     }
 
-    return this.prisma.dailyQuestionnaireAnswer.update({
-      where: { id: dto.answerId },
-      data: {
-        answer: dto.answer,
-        filledAt: new Date(),
-      },
-      include: {
-        question: true,
-        dispatch: true,
-      },
+    const campaignPatch = await this.resolveDispatchCampaignPatch(
+      tenantId,
+      answerRecord,
+    );
+
+    return this.prisma.$transaction(async (tx) => {
+      if (campaignPatch) {
+        await tx.dailyQuestionDispatch.update({
+          where: { id: answerRecord.dispatchId },
+          data: campaignPatch,
+        });
+      }
+
+      return tx.dailyQuestionnaireAnswer.update({
+        where: { id: dto.answerId },
+        data: {
+          answer: dto.answer,
+          filledAt: new Date(),
+        },
+        include: {
+          question: true,
+          dispatch: true,
+        },
+      });
     });
+  }
+
+  private async resolveDispatchCampaignPatch(tenantId: string, answerRecord: any) {
+    const dispatch = answerRecord.dispatch;
+
+    if (!dispatch || dispatch.campaignKey) return null;
+
+    if (dispatch.schedule?.campaignKey) {
+      return {
+        campaignKey: dispatch.schedule.campaignKey,
+      };
+    }
+
+    const schedule = await this.prisma.dailyQuestionSchedule.findFirst({
+      where: {
+        OR: [{ tenantId }, { tenantId: null }],
+        questionId: answerRecord.questionId,
+        campaignKey: { not: null },
+        isActive: true,
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    if (!schedule?.campaignKey) return null;
+
+    return {
+      scheduleId: schedule.id,
+      campaignKey: schedule.campaignKey,
+    };
   }
 }

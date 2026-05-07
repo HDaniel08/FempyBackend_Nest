@@ -13,7 +13,7 @@ export class NotificationsController {
   async pushTest(@Tenant() tenant: any, @Req() req: any) {
     return this.notifications.sendNow({
       tenantId: tenant.id,
-      userId: req.user.userId,
+      userId: req.user.sub,
       type: 'push_test',
       payload: {
         title: 'Fempy teszt',

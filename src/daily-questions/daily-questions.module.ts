@@ -10,6 +10,7 @@ import { DailyQuestionAudienceService } from './services/daily-question-audience
 import { DailyQuestionPushService } from './services/daily-question-push.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { DailyQuestionSchedulerService } from './services/daily-question-scheduler.service';
+import { DailyQuestionTopicReportService } from './services/daily-question-topic-report.service';
 
 @Module({
   imports: [ScheduleModule.forRoot()],
@@ -23,12 +24,14 @@ import { DailyQuestionSchedulerService } from './services/daily-question-schedul
     DailyQuestionPushService,
     DailyQuestionSchedulesService,
     DailyQuestionSchedulerService,
+    DailyQuestionTopicReportService,
   ],
   exports: [
     DailyQuestionsService,
     DailyQuestionSchedulerService,
     DailyQuestionDispatchService,
     DailyQuestionAnswerService,
+    DailyQuestionTopicReportService,
   ],
 })
 export class DailyQuestionsModule {}

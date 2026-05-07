@@ -17,6 +17,61 @@ export class DailyQuestionsService {
     return { tenantId, userId };
   }
 
+  private makeSlug(value: string) {
+    return String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      || 'topic';
+  }
+
+  private async resolveTopic(input: {
+    tenantId: string | null;
+    topicId?: string;
+    topic: string;
+    isGlobal?: boolean;
+  }) {
+    if (input.topicId) {
+      const topic = await this.prisma.dailyQuestionTopic.findFirst({
+        where: {
+          id: input.topicId,
+          OR: [{ tenantId: input.tenantId }, { isGlobal: true }],
+        },
+      });
+
+      if (!topic) {
+        throw new NotFoundException('A tÃ©makÃ¶r nem talÃ¡lhatÃ³.');
+      }
+
+      return topic;
+    }
+
+    const name = input.topic.trim();
+    const tenantId = input.isGlobal ? null : input.tenantId;
+
+    const existing = await this.prisma.dailyQuestionTopic.findFirst({
+      where: {
+        tenantId,
+        name,
+      },
+    });
+
+    if (existing) return existing;
+
+    const baseSlug = this.makeSlug(name);
+    const slug = `${baseSlug}-${Date.now().toString(36)}`;
+
+    return this.prisma.dailyQuestionTopic.create({
+      data: {
+        tenantId,
+        name,
+        slug,
+        isGlobal: input.isGlobal ?? false,
+      },
+    });
+  }
+
   async create(userCtx: any, dto: CreateDailyQuestionDto) {
     const { tenantId } = this.getCtxIds(userCtx);
 
@@ -24,14 +79,23 @@ export class DailyQuestionsService {
       throw new BadRequestException('Tenant-specifikus kérdéshez tenantId szükséges.');
     }
 
+    const isGlobal = dto.isGlobal ?? false;
+    const topic = await this.resolveTopic({
+      tenantId,
+      topicId: dto.topicId,
+      topic: dto.topic,
+      isGlobal,
+    });
+
     return this.prisma.dailyQuestion.create({
       data: {
-        tenantId: dto.isGlobal ? null : tenantId,
-        topic: dto.topic,
+        tenantId: isGlobal ? null : tenantId,
+        topicId: topic.id,
+        topic: topic.name,
         question: dto.question,
         type: dto.type,
         answerOptions: dto.answerOptions,
-        isGlobal: dto.isGlobal ?? false,
+        isGlobal,
         isActive: true,
         hungarianNorm: dto.hungarianNorm ? dto.hungarianNorm : undefined,
         hungarianStd: dto.hungarianStd ? dto.hungarianStd : undefined,
@@ -50,6 +114,7 @@ export class DailyQuestionsService {
         ],
       },
       orderBy: [{ createdAt: 'desc' }],
+      include: { topicRef: true },
     });
   }
 
@@ -67,10 +132,26 @@ export class DailyQuestionsService {
       throw new NotFoundException('A kérdés nem található.');
     }
 
+    let topicData = {};
+
+    if (dto.topic || dto.topicId) {
+      const topic = await this.resolveTopic({
+        tenantId,
+        topicId: dto.topicId,
+        topic: dto.topic ?? question.topic,
+        isGlobal: dto.isGlobal ?? question.isGlobal,
+      });
+
+      topicData = {
+        topicId: topic.id,
+        topic: topic.name,
+      };
+    }
+
     return this.prisma.dailyQuestion.update({
       where: { id },
       data: {
-        topic: dto.topic,
+        ...topicData,
         question: dto.question,
         type: dto.type,
         answerOptions: dto.answerOptions,

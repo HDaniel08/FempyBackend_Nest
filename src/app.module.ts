@@ -17,11 +17,12 @@ import { HealthModule } from './health/health.module';
 import { PublicModule } from './public/public.module';
 import { PositionsModule } from './positions/positions.module';
 import { AdminModule } from './admin/admin.module';
+import { SuperAdminModule } from './super-admin/super-admin.module';
 
 @Module({
   imports: [ ConfigModule.forRoot({
       isGlobal: true, // így nem kell minden modulba importálni
-    }),PrismaModule,PublicModule, HealthModule, TenantsModule, UsersModule, AuthModule, DevicesModule, NotificationsModule,DailyMoodModule,DailyQuestionsModule,PositionsModule,AdminModule,
+    }),PrismaModule,PublicModule, HealthModule, TenantsModule, UsersModule, AuthModule, DevicesModule, NotificationsModule,DailyMoodModule,DailyQuestionsModule,PositionsModule,AdminModule,SuperAdminModule,
      
     ServeStaticModule.forRoot({
       rootPath: join(process.cwd(), 'uploads'),

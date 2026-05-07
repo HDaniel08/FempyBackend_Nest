@@ -75,6 +75,7 @@ export class UsersService {
     return this.prisma.user.findFirst({
       where: { tenantId, id: userId, isDeleted: false },
       include: {
+        tenant: true,
         profile: true,
         position: true,
       },
@@ -90,6 +91,7 @@ export class UsersService {
         isDeleted: false,
       },
       include: {
+        tenant: true,
         profile: true,
         position: true,
       },

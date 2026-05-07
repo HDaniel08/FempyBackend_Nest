@@ -18,6 +18,10 @@ export class CreateDailyQuestionScheduleDto {
   @IsString()
   name?: string;
 
+  @IsOptional()
+  @IsString()
+  campaignKey?: string;
+
   @IsEnum(DailyQuestionScheduleType)
   scheduleType: DailyQuestionScheduleType;
 

@@ -9,6 +9,10 @@ import {
 import { DailyQuestionType } from '@prisma/client';
 
 export class CreateDailyQuestionDto {
+  @IsOptional()
+  @IsString()
+  topicId?: string;
+
   @IsString()
   topic: string;
 

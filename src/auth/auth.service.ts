@@ -108,6 +108,7 @@ export class AuthService {
         id: user.tenant.id,
         slug: user.tenant.slug,
         name: user.tenant.name,
+        appAccessEnabled: user.tenant.appAccessEnabled,
       },
     };
   }

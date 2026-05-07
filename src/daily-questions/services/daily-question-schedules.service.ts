@@ -50,6 +50,7 @@ export class DailyQuestionSchedulesService {
         tenantId: question.isGlobal ? null : tenantId,
         questionId: dto.questionId,
         name: dto.name,
+        campaignKey: dto.campaignKey,
         isActive: true,
         isDefaultWeekdayMorning: dto.isDefaultWeekdayMorning ?? false,
         scheduleType: dto.scheduleType,
@@ -98,6 +99,7 @@ export class DailyQuestionSchedulesService {
       where: { id },
       data: {
         name: dto.name,
+        campaignKey: dto.campaignKey,
         isDefaultWeekdayMorning: dto.isDefaultWeekdayMorning,
         scheduleType: dto.scheduleType,
         cronExpr: dto.cronExpr,

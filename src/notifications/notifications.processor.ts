@@ -1,11 +1,13 @@
+import { Logger } from '@nestjs/common';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { ExpoPushService } from './expo-push.service';
-import { Logger } from '@nestjs/common';
+
 @Processor('notifications')
 export class NotificationsProcessor extends WorkerHost {
   private readonly logger = new Logger(NotificationsProcessor.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly expoPush: ExpoPushService,
@@ -14,29 +16,74 @@ export class NotificationsProcessor extends WorkerHost {
   }
 
   async process(job: Job) {
-     this.logger.log(`Job érkezett: id=${job.id} name=${job.name}`);
+    this.logger.log(`Job érkezett: id=${job.id} name=${job.name}`);
     this.logger.log(`Job data: ${JSON.stringify(job.data)}`);
-    // A job.data felépítését a saját NotificationsService-ünk adja.
-    const { tenantId, userId, payload } = job.data;
 
-    // 1) Lekérjük a user eszközeit (expo tokenek)
-    // ⚠️ Itt lehet nálad más a model/mező neve!
+    const { tenantId, userId, payload, notificationJobId } = job.data;
+
     const devices = await this.prisma.userDevice.findMany({
       where: { tenantId, userId },
-      select: { expoToken: true },
+      select: { id: true, expoToken: true },
     });
 
-    const tokens = devices.map((d) => d.expoToken);
+    const tokens = devices.map((device) => device.expoToken);
 
-    // 2) Küldés Expo felé
     const result = await this.expoPush.sendToTokens({
       tokens,
       title: payload?.title ?? 'Fempy',
       body: payload?.body ?? 'Teszt értesítés',
       data: payload?.data ?? {},
     });
+
     this.logger.log(`Expo tickets: ${JSON.stringify(result.tickets)}`);
-this.logger.log(`Invalid tokens: ${JSON.stringify(result.invalidTokens)}`);
+    this.logger.log(`Invalid tokens: ${JSON.stringify(result.invalidTokens)}`);
+
+    const ticketErrors = result.tickets.filter(
+      (ticket: any) => ticket.status === 'error',
+    );
+
+    const deviceNotRegisteredTokens = ticketErrors
+      .filter((ticket: any) => ticket.details?.error === 'DeviceNotRegistered')
+      .map((ticket: any) => {
+        const index = result.tickets.indexOf(ticket);
+        return devices[index]?.expoToken;
+      })
+      .filter(Boolean);
+
+    if (deviceNotRegisteredTokens.length > 0) {
+      await this.prisma.userDevice.deleteMany({
+        where: {
+          tenantId,
+          expoToken: { in: deviceNotRegisteredTokens },
+        },
+      });
+    }
+
+    if (ticketErrors.length > 0) {
+      const errorMessage = ticketErrors
+        .map((ticket: any) => `${ticket.details?.error ?? 'ExpoError'}: ${ticket.message}`)
+        .join(' | ');
+
+      await this.prisma.notificationJob.update({
+        where: { id: notificationJobId },
+        data: {
+          status: 'failed',
+          errorMessage,
+          processedAt: new Date(),
+        },
+      });
+
+      this.logger.error(`Expo push ticket hiba: ${errorMessage}`);
+      return { sentTo: tokens.length, ...result, failed: ticketErrors.length };
+    }
+
+    await this.prisma.notificationJob.update({
+      where: { id: notificationJobId },
+      data: {
+        status: 'sent',
+        processedAt: new Date(),
+      },
+    });
 
     return { sentTo: tokens.length, ...result };
   }
