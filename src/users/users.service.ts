@@ -272,6 +272,90 @@ async adminListUsers(tenantId: string) {
   });
 }
 
+async adminGetUserSupport(tenantId: string, userId: string) {
+  const user = await this.prisma.user.findFirst({
+    where: { id: userId, tenantId },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      role: true,
+      isLeader: true,
+      isDeleted: true,
+      createdAt: true,
+      updatedAt: true,
+      position: { select: { id: true, name: true } },
+      profile: {
+        select: {
+          nickname: true,
+          isAnonymous: true,
+          isPublic: true,
+          onHoliday: true,
+          dailyNotification: true,
+          lessNotification: true,
+          profilePic: true,
+          profilePicUrl: true,
+        },
+      },
+    },
+  });
+
+  if (!user) throw new NotFoundException("User not found");
+
+  const [devices, recentMoods, pendingAnswers, recentAnswers, activity, usage] =
+    await Promise.all([
+      this.prisma.userDevice.findMany({
+        where: { tenantId, userId },
+        orderBy: { lastSeenAt: "desc" },
+        take: 5,
+      }),
+      this.prisma.dailyMood.findMany({
+        where: { tenantId, userId },
+        orderBy: { date: "desc" },
+        take: 10,
+      }),
+      this.prisma.dailyQuestionnaireAnswer.count({
+        where: { tenantId, userId, isActive: true, filledAt: null },
+      }),
+      this.prisma.dailyQuestionnaireAnswer.findMany({
+        where: { tenantId, userId },
+        orderBy: { createdAt: "desc" },
+        take: 10,
+        include: {
+          question: { select: { question: true, topic: true } },
+        },
+      }),
+      this.prisma.activityEvent.findMany({
+        where: { tenantId, userId },
+        orderBy: { createdAt: "desc" },
+        take: 25,
+      }),
+      this.prisma.appUsageSession.aggregate({
+        where: { tenantId, userId },
+        _sum: { durationSeconds: true },
+        _max: { lastSeenAt: true },
+        _count: { id: true },
+      }),
+    ]);
+
+  return {
+    user,
+    devices,
+    recentMoods,
+    dailyQuestions: {
+      pendingAnswers,
+      recentAnswers,
+    },
+    activity,
+    usage: {
+      totalSeconds: usage._sum.durationSeconds ?? 0,
+      sessions: usage._count.id,
+      lastSeenAt: usage._max.lastSeenAt,
+    },
+  };
+}
+
 async adminCreateUser(
   tenantId: string,
   input: {

@@ -15,20 +15,29 @@ import { UsersService } from '../users/users.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { ActivityLogService } from '../activity/activity-log.service';
 
 @Controller('admin/users')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.ADMIN)
 export class AdminUsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly activity: ActivityLogService,
+  ) {}
 
   @Get()
   listUsers(@Req() req: any) {
     return this.usersService.adminListUsers(req.user.tenantId);
   }
 
+  @Get(':id/support')
+  getUserSupport(@Req() req: any, @Param('id') id: string) {
+    return this.usersService.adminGetUserSupport(req.user.tenantId, id);
+  }
+
   @Post()
-  createUser(
+  async createUser(
     @Req() req: any,
     @Body()
     body: {
@@ -39,11 +48,23 @@ export class AdminUsersController {
       role?: UserRole;
     },
   ) {
-    return this.usersService.adminCreateUser(req.user.tenantId, body);
+    const created = await this.usersService.adminCreateUser(req.user.tenantId, body);
+    await this.activity.log({
+      tenantId: req.user.tenantId,
+      userId: created.id,
+      event: 'ADMIN_USER_CREATED',
+      source: 'admin',
+      entityType: 'USER',
+      entityId: created.id,
+      actor: { type: 'USER', id: req.user.sub },
+      metadata: { email: created.email, role: created.role },
+      request: this.activity.requestMeta(req),
+    });
+    return created;
   }
 
   @Patch(':id')
-  updateUser(
+  async updateUser(
     @Req() req: any,
     @Param('id') id: string,
     @Body()
@@ -54,31 +75,67 @@ export class AdminUsersController {
       role?: UserRole;
     },
   ) {
-    return this.usersService.adminUpdateUser(req.user.tenantId, id, body);
+    const updated = await this.usersService.adminUpdateUser(req.user.tenantId, id, body);
+    await this.activity.log({
+      tenantId: req.user.tenantId,
+      userId: id,
+      event: 'ADMIN_USER_UPDATED',
+      source: 'admin',
+      entityType: 'USER',
+      entityId: id,
+      actor: { type: 'USER', id: req.user.sub },
+      metadata: { changed: Object.keys(body ?? {}), email: updated.email, role: updated.role },
+      request: this.activity.requestMeta(req),
+    });
+    return updated;
   }
 
 @Patch(':id/deactivate')
-deactivateUser(@Req() req: any, @Param('id') id: string) {
-  return this.usersService.adminSetUserDeleted(
+async deactivateUser(@Req() req: any, @Param('id') id: string) {
+  const updated = await this.usersService.adminSetUserDeleted(
     req.user.tenantId,
     id,
     true,
     req.user.sub,
   );
+  await this.activity.log({
+    tenantId: req.user.tenantId,
+    userId: id,
+    event: 'ADMIN_USER_DEACTIVATED',
+    source: 'admin',
+    entityType: 'USER',
+    entityId: id,
+    actor: { type: 'USER', id: req.user.sub },
+    metadata: { email: updated.email, role: updated.role },
+    request: this.activity.requestMeta(req),
+  });
+  return updated;
 }
 
 @Patch(':id/activate')
-activateUser(@Req() req: any, @Param('id') id: string) {
-  return this.usersService.adminSetUserDeleted(
+async activateUser(@Req() req: any, @Param('id') id: string) {
+  const updated = await this.usersService.adminSetUserDeleted(
     req.user.tenantId,
     id,
     false,
     req.user.sub,
   );
+  await this.activity.log({
+    tenantId: req.user.tenantId,
+    userId: id,
+    event: 'ADMIN_USER_ACTIVATED',
+    source: 'admin',
+    entityType: 'USER',
+    entityId: id,
+    actor: { type: 'USER', id: req.user.sub },
+    metadata: { email: updated.email, role: updated.role },
+    request: this.activity.requestMeta(req),
+  });
+  return updated;
 }
 
   @Patch(':id/position')
-  assignPosition(
+  async assignPosition(
     @Req() req: any,
     @Param('id') id: string,
     @Body()
@@ -86,10 +143,22 @@ activateUser(@Req() req: any, @Param('id') id: string) {
       positionId: string | null;
     },
   ) {
-    return this.usersService.adminAssignUserPosition(
+    const updated = await this.usersService.adminAssignUserPosition(
       req.user.tenantId,
       id,
       body.positionId ?? null,
     );
+    await this.activity.log({
+      tenantId: req.user.tenantId,
+      userId: id,
+      event: 'ADMIN_USER_POSITION_ASSIGNED',
+      source: 'admin',
+      entityType: 'USER',
+      entityId: id,
+      actor: { type: 'USER', id: req.user.sub },
+      metadata: { positionId: body.positionId ?? null, positionName: updated.position?.name ?? null },
+      request: this.activity.requestMeta(req),
+    });
+    return updated;
   }
 }

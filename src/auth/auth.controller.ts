@@ -20,18 +20,18 @@ export class AuthController {
   ) {}
 
   @Post('register')
-  async register(@Tenant() tenant: any, @Body() body: RegisterDto) {
+  async register(@Tenant() tenant: any, @Body() body: RegisterDto, @Req() req: any) {
     // tenant.id a middlewareből jön
-    return this.auth.register(tenant.id, body);
+    return this.auth.register(tenant.id, body, req);
   }
 
   @Post('login')
-  async login(@Tenant() tenant: any, @Body() body: LoginDto) {
-    return this.auth.login(tenant.id, body);
+  async login(@Tenant() tenant: any, @Body() body: LoginDto, @Req() req: any) {
+    return this.auth.login(tenant.id, body, req);
   }
   @Post('login-global')
-async loginGlobal(@Body() body: LoginDto) {
-  return this.auth.loginGlobal(body);
+async loginGlobal(@Body() body: LoginDto, @Req() req: any) {
+  return this.auth.loginGlobal(body, req);
 }
 
   /**

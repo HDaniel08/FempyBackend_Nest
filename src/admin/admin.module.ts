@@ -10,8 +10,10 @@ import { AdminSettingsController } from './admin-settings.controller';
 import { AdminSettingsService } from './admin-settings.service';
 import { AdminDashboardService } from './admin-dashboard.service';
 import { AdminDashboardController } from './admin-dashboard.controller';
+import { ActivityModule } from '../activity/activity.module';
 
 @Module({
+  imports: [ActivityModule],
   controllers: [
     AdminUsersController,
     AdminPositionsController,

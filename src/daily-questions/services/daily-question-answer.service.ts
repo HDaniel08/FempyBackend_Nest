@@ -5,10 +5,14 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SubmitDailyQuestionAnswerDto } from '../dto/submit-daily-question-answer.dto';
+import { ActivityLogService } from '../../activity/activity-log.service';
 
 @Injectable()
 export class DailyQuestionAnswerService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly activity: ActivityLogService,
+  ) {}
 
   private getCtxIds(userCtx: any) {
     const tenantId = userCtx?.tenantId ?? null;
@@ -93,7 +97,7 @@ export class DailyQuestionAnswerService {
       answerRecord,
     );
 
-    return this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       if (campaignPatch) {
         await tx.dailyQuestionDispatch.update({
           where: { id: answerRecord.dispatchId },
@@ -113,6 +117,23 @@ export class DailyQuestionAnswerService {
         },
       });
     });
+
+    await this.activity.log({
+      tenantId,
+      userId,
+      event: 'DAILY_QUESTION_ANSWER_SUBMITTED',
+      source: 'app',
+      entityType: 'DAILY_QUESTION_ANSWER',
+      entityId: updated.id,
+      metadata: {
+        questionId: updated.questionId,
+        dispatchId: updated.dispatchId,
+        campaignKey: updated.dispatch?.campaignKey ?? null,
+        sentOn: updated.sentOn,
+      },
+    });
+
+    return updated;
   }
 
   private async resolveDispatchCampaignPatch(tenantId: string, answerRecord: any) {

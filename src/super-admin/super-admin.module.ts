@@ -3,6 +3,9 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaModule } from '../prisma/prisma.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { ActivityModule } from '../activity/activity.module';
+import { ContentModule } from '../content/content.module';
+import { UsageModule } from '../usage/usage.module';
 import { SuperAdminController } from './super-admin.controller';
 import { SuperAdminGuard } from './super-admin.guard';
 import { SuperAdminService } from './super-admin.service';
@@ -11,6 +14,9 @@ import { SuperAdminService } from './super-admin.service';
   imports: [
     PrismaModule,
     NotificationsModule,
+    ActivityModule,
+    ContentModule,
+    UsageModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({

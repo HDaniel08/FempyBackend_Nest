@@ -1,6 +1,8 @@
 import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";
+import { ErrorLoggingFilter } from "./common/filters/error-logging.filter";
+import { PrismaService } from "./prisma/prisma.service";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -8,6 +10,7 @@ app.enableCors({
     origin: [
       'http://localhost:5173',
       'http://127.0.0.1:5173',
+      'http://192.168.100.6:5173',
       'https://fempyadmin.pages.dev/',
       'https://fempyadmin.pages.dev',
     ],
@@ -27,6 +30,7 @@ app.enableCors({
       transform: true, // string->number, date, stb. (ha DTO engedi)
     })
   );
+  app.useGlobalFilters(new ErrorLoggingFilter(app.get(PrismaService)));
 
   await app.listen(process.env.PORT || 3000, '0.0.0.0');
 }

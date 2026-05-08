@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { GetDailyMoodHistoryDto, UpsertDailyMoodDto } from "./dto/upsert-daily-mood.dto";
 import { UpdateDailyMoodCommentDto } from "./dto/update-daily-mood-comment.dto";
+import { ActivityLogService } from "../activity/activity-log.service";
 
 /**
  * Napi kedv szabály:
@@ -10,7 +11,10 @@ import { UpdateDailyMoodCommentDto } from "./dto/update-daily-mood-comment.dto";
  */
 @Injectable()
 export class DailyMoodService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private activity: ActivityLogService,
+  ) {}
 
 private getCtxIds(userCtx: any) {
  
@@ -163,7 +167,7 @@ private getCtxIds(userCtx: any) {
     const { tenantId, userId } = this.getCtxIds(userCtx);
     const date = this.todayDateOnly();
 
-    return this.prisma.dailyMood.upsert({
+    const mood = await this.prisma.dailyMood.upsert({
       where: {
         tenantId_userId_date: { tenantId, userId, date },
       },
@@ -180,6 +184,22 @@ private getCtxIds(userCtx: any) {
         comment: dto.comment ?? null,
       },
     });
+
+    await this.activity.log({
+      tenantId,
+      userId,
+      event: "DAILY_MOOD_UPSERTED",
+      source: "app",
+      entityType: "DAILY_MOOD",
+      entityId: mood.id,
+      metadata: {
+        mood: mood.mood,
+        hasComment: Boolean(mood.comment),
+        date: this.formatDateOnly(mood.date),
+      },
+    });
+
+    return mood;
   }
 
   async updateTodayComment(userCtx: any, dto: UpdateDailyMoodCommentDto) {
@@ -196,9 +216,24 @@ private getCtxIds(userCtx: any) {
       throw new BadRequestException("Nincs még rögzített napi kedv ehhez a naphoz.");
     }
 
-    return this.prisma.dailyMood.update({
+    const mood = await this.prisma.dailyMood.update({
       where: { id: existing.id },
       data: { comment: dto.comment },
     });
+
+    await this.activity.log({
+      tenantId,
+      userId,
+      event: "DAILY_MOOD_COMMENT_UPDATED",
+      source: "app",
+      entityType: "DAILY_MOOD",
+      entityId: mood.id,
+      metadata: {
+        hasComment: Boolean(mood.comment),
+        date: this.formatDateOnly(mood.date),
+      },
+    });
+
+    return mood;
   }
 }

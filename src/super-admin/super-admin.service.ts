@@ -1,9 +1,13 @@
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UserRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ActivityLogService } from '../activity/activity-log.service';
+import { ActivityMaintenanceService } from '../activity/activity-maintenance.service';
+import { ContentService } from '../content/content.service';
+import { UsageService } from '../usage/usage.service';
 
 type PushFilters = {
   tenantId?: string;
@@ -22,6 +26,10 @@ export class SuperAdminService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly notifications: NotificationsService,
+    private readonly activity: ActivityLogService,
+    private readonly activityMaintenance: ActivityMaintenanceService,
+    private readonly content: ContentService,
+    private readonly usage: UsageService,
   ) {}
 
   async login(input: { email: string; password: string }) {
@@ -58,8 +66,8 @@ export class SuperAdminService {
     return admin;
   }
 
-  listTenants() {
-    return this.prisma.tenant.findMany({
+  async listTenants() {
+    const tenants = await this.prisma.tenant.findMany({
       orderBy: { createdAt: 'desc' },
       include: {
         positions: {
@@ -70,6 +78,139 @@ export class SuperAdminService {
         _count: { select: { users: true, devices: true, dailyQuestionDispatches: true } },
       },
     });
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const activeSince = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    return Promise.all(
+      tenants.map(async (tenant) => {
+        const [
+          lastAdminLogin,
+          lastAppActivity,
+          activeDevices,
+          todayUsage,
+          pendingDispatches,
+          failedNotificationJobs,
+        ] = await Promise.all([
+          this.prisma.activityEvent.findFirst({
+            where: {
+              tenantId: tenant.id,
+              event: 'AUTH_LOGIN_SUCCEEDED',
+              user: { role: UserRole.ADMIN },
+            },
+            orderBy: { createdAt: 'desc' },
+            select: { createdAt: true },
+          }),
+          this.prisma.activityEvent.findFirst({
+            where: { tenantId: tenant.id, category: 'APP' },
+            orderBy: { createdAt: 'desc' },
+            select: { createdAt: true },
+          }),
+          this.prisma.userDevice.count({
+            where: {
+              tenantId: tenant.id,
+              OR: [{ lastSeenAt: { gte: activeSince } }, { lastSeenAt: null }],
+            },
+          }),
+          this.prisma.appUsageSession.aggregate({
+            where: { tenantId: tenant.id, startedAt: { gte: today } },
+            _sum: { durationSeconds: true },
+          }),
+          this.prisma.dailyQuestionDispatch.count({
+            where: { tenantId: tenant.id, answers: { none: {} } },
+          }),
+          this.prisma.notificationJob.count({
+            where: { tenantId: tenant.id, status: { in: ['failed', 'error'] } },
+          }),
+        ]);
+
+        return {
+          ...tenant,
+          health: {
+            lastAdminLoginAt: lastAdminLogin?.createdAt ?? null,
+            lastAppActivityAt: lastAppActivity?.createdAt ?? null,
+            activeDevices,
+            todayUsageSeconds: todayUsage._sum.durationSeconds ?? 0,
+            pendingDispatches,
+            failedNotificationJobs,
+          },
+        };
+      }),
+    );
+  }
+
+  async getDashboard() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const activeSince = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    const [
+      tenants,
+      activeUsers,
+      todayActiveUsers,
+      todayUsage,
+      recentImpersonations,
+      criticalAlerts,
+    ] = await Promise.all([
+      this.prisma.tenant.count(),
+      this.prisma.user.count({ where: { isDeleted: false } }),
+      this.prisma.appUsageSession.groupBy({
+        by: ['userId'],
+        where: { lastSeenAt: { gte: activeSince } },
+      }),
+      this.prisma.appUsageSession.aggregate({
+        where: { startedAt: { gte: today } },
+        _sum: { durationSeconds: true },
+      }),
+      this.prisma.activityEvent.findMany({
+        where: { event: 'SUPER_ADMIN_TENANT_IMPERSONATION_STARTED' },
+        orderBy: { createdAt: 'desc' },
+        take: 8,
+        include: { tenant: { select: { name: true, slug: true } }, user: { select: { email: true } } },
+      }),
+      this.prisma.notificationJob.findMany({
+        where: { status: { in: ['failed', 'error'] } },
+        orderBy: { createdAt: 'desc' },
+        take: 8,
+        include: { tenant: { select: { name: true, slug: true } } },
+      }),
+    ]);
+
+    return {
+      stats: {
+        tenants,
+        activeUsers,
+        todayActiveAppUsers: todayActiveUsers.length,
+        todayUsageSeconds: todayUsage._sum.durationSeconds ?? 0,
+      },
+      recentImpersonations,
+      criticalAlerts: criticalAlerts.map((job) => ({
+        id: job.id,
+        title: 'Sikertelen notification job',
+        tenant: job.tenant,
+        detail: job.errorMessage ?? job.type,
+        createdAt: job.createdAt,
+      })),
+    };
+  }
+
+  async listPlatformAudit(query: any) {
+    const where: any = {};
+    if (query?.tenantId) where.tenantId = String(query.tenantId);
+    if (query?.event) where.event = { contains: String(query.event), mode: 'insensitive' };
+    if (query?.category) where.category = String(query.category);
+    const limit = Math.min(Number(query?.limit ?? 100), 300);
+
+    return this.prisma.activityEvent.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      include: {
+        tenant: { select: { id: true, name: true, slug: true } },
+        user: { select: { id: true, email: true, firstName: true, lastName: true, role: true } },
+      },
+    });
   }
 
   async createTenant(input: {
@@ -78,7 +219,7 @@ export class SuperAdminService {
     adminEmail: string;
     adminName: string;
     adminPassword: string;
-  }) {
+  }, actor?: any, req?: any) {
     const name = input.tenantName?.trim();
     const slug = input.slug?.trim().toLowerCase();
     const email = input.adminEmail?.trim().toLowerCase();
@@ -92,7 +233,7 @@ export class SuperAdminService {
     const lastName = rest.join(' ') || 'Admin';
     const passwordHash = await bcrypt.hash(input.adminPassword, 10);
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
         data: {
           name,
@@ -142,13 +283,808 @@ export class SuperAdminService {
 
       return { tenant, adminUser: user };
     });
+
+    await this.activity.log({
+      tenantId: result.tenant.id,
+      userId: result.adminUser.id,
+      event: 'SUPER_ADMIN_TENANT_CREATED',
+      source: 'super-admin',
+      entityType: 'TENANT',
+      entityId: result.tenant.id,
+      actor: { type: 'PLATFORM_ADMIN', id: actor?.sub ?? null },
+      metadata: {
+        tenantName: result.tenant.name,
+        slug: result.tenant.slug,
+        adminEmail: result.adminUser.email,
+      },
+      request: this.activity.requestMeta(req),
+    });
+
+    return result;
   }
 
-  updateTenantAccess(tenantId: string, enabled: boolean) {
-    return this.prisma.tenant.update({
+  async updateTenantAccess(tenantId: string, enabled: boolean, actor?: any, req?: any) {
+    const tenant = await this.prisma.tenant.update({
       where: { id: tenantId },
       data: { appAccessEnabled: enabled },
     });
+
+    await this.activity.log({
+      tenantId,
+      event: enabled ? 'SUPER_ADMIN_TENANT_APP_ENABLED' : 'SUPER_ADMIN_TENANT_APP_DISABLED',
+      source: 'super-admin',
+      entityType: 'TENANT',
+      entityId: tenantId,
+      actor: { type: 'PLATFORM_ADMIN', id: actor?.sub ?? null },
+      supportSessionId: await this.resolveSupportSessionId(tenantId, actor?.sub, req),
+      metadata: { enabled, tenantName: tenant.name, slug: tenant.slug },
+      request: this.activity.requestMeta(req),
+    });
+
+    return tenant;
+  }
+
+  async startTenantImpersonation(
+    tenantId: string,
+    input: { reason?: string },
+    actor?: any,
+    req?: any,
+  ) {
+    const reason = input.reason?.trim();
+    if (!reason) {
+      throw new BadRequestException('Support ok megadasa kotelezo.');
+    }
+
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: {
+        id: true,
+        slug: true,
+        name: true,
+        appAccessEnabled: true,
+      },
+    });
+    if (!tenant) throw new NotFoundException('Tenant nem talalhato.');
+
+    const adminUser = await this.prisma.user.findFirst({
+      where: {
+        tenantId,
+        role: UserRole.ADMIN,
+        isDeleted: false,
+      },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        role: true,
+        isLeader: true,
+      },
+    });
+    if (!adminUser) {
+      throw new BadRequestException('A tenantban nincs aktiv admin felhasznalo.');
+    }
+
+    const accessToken = await this.jwt.signAsync({
+      sub: adminUser.id,
+      tenantId: tenant.id,
+      email: adminUser.email,
+      isLeader: adminUser.isLeader,
+      role: adminUser.role,
+      impersonated: true,
+      impersonatedByPlatformAdminId: actor?.sub ?? null,
+      impersonatedByPlatformAdminEmail: actor?.email ?? null,
+      impersonationReason: reason,
+      scope: 'tenant-admin-impersonation',
+    });
+
+    await this.activity.log({
+      tenantId,
+      userId: adminUser.id,
+      event: 'SUPER_ADMIN_TENANT_IMPERSONATION_STARTED',
+      source: 'super-admin',
+      entityType: 'TENANT',
+      entityId: tenantId,
+      actor: { type: 'PLATFORM_ADMIN', id: actor?.sub ?? null },
+      metadata: {
+        reason,
+        tenantName: tenant.name,
+        platformAdminEmail: actor?.email ?? null,
+        impersonatedUserEmail: adminUser.email,
+      },
+      request: this.activity.requestMeta(req),
+    });
+
+    return {
+      accessToken,
+      user: {
+        id: adminUser.id,
+        firstName: adminUser.firstName,
+        lastName: adminUser.lastName,
+        email: adminUser.email,
+        isLeader: adminUser.isLeader,
+        role: adminUser.role,
+      },
+      tenant,
+      impersonation: {
+        active: true,
+        reason,
+        startedAt: new Date().toISOString(),
+        platformAdmin: {
+          id: actor?.sub ?? null,
+          email: actor?.email ?? null,
+          name: actor?.name ?? null,
+        },
+      },
+    };
+  }
+
+  async endTenantImpersonation(
+    tenantId: string,
+    input: { reason?: string },
+    actor?: any,
+    req?: any,
+  ) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { id: true, name: true, slug: true },
+    });
+    if (!tenant) throw new NotFoundException('Tenant nem talalhato.');
+
+    await this.activity.log({
+      tenantId,
+      event: 'SUPER_ADMIN_TENANT_IMPERSONATION_ENDED',
+      source: 'super-admin',
+      entityType: 'TENANT',
+      entityId: tenantId,
+      actor: { type: 'PLATFORM_ADMIN', id: actor?.sub ?? null },
+      metadata: {
+        tenantName: tenant.name,
+        slug: tenant.slug,
+        reason: input.reason ?? null,
+        platformAdminEmail: actor?.email ?? null,
+      },
+      request: this.activity.requestMeta(req),
+    });
+
+    return { ok: true };
+  }
+
+  async inspectTenant(tenantId: string) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      include: {
+        settings: true,
+        _count: {
+          select: {
+            users: true,
+            positions: true,
+            devices: true,
+            dailyQuestionSchedules: true,
+            dailyQuestionDispatches: true,
+            dailyQuestionAnswers: true,
+          },
+        },
+      },
+    });
+
+    if (!tenant) throw new NotFoundException('Tenant nem talÃ¡lhatÃ³.');
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const last30Days = new Date(today);
+    last30Days.setDate(last30Days.getDate() - 29);
+
+    const [
+      activeUsers,
+      inactiveUsers,
+      adminUsers,
+      leaderUsers,
+      users,
+      positions,
+      moodStats,
+      todayMoods,
+      pendingAnswers,
+      recentMoods,
+      recentDispatches,
+      notificationJobs,
+      campaignGroups,
+      recentActivity,
+      supportSessions,
+    ] = await Promise.all([
+      this.prisma.user.count({ where: { tenantId, isDeleted: false } }),
+      this.prisma.user.count({ where: { tenantId, isDeleted: true } }),
+      this.prisma.user.count({ where: { tenantId, role: UserRole.ADMIN, isDeleted: false } }),
+      this.prisma.user.count({ where: { tenantId, isLeader: true, isDeleted: false } }),
+      this.prisma.user.findMany({
+        where: { tenantId },
+        orderBy: [{ isDeleted: 'asc' }, { updatedAt: 'desc' }],
+        take: 80,
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          role: true,
+          isLeader: true,
+          isDeleted: true,
+          createdAt: true,
+          updatedAt: true,
+          positionId: true,
+          position: { select: { id: true, name: true } },
+          profile: {
+            select: {
+              nickname: true,
+              isAnonymous: true,
+              isPublic: true,
+              onHoliday: true,
+              dailyNotification: true,
+            },
+          },
+          _count: { select: { devices: true, moods: true, answers: true, notifJobs: true } },
+        },
+      }),
+      this.prisma.position.findMany({
+        where: { tenantId, isDeleted: false },
+        orderBy: [{ parentId: 'asc' }, { name: 'asc' }],
+        select: {
+          id: true,
+          name: true,
+          parentId: true,
+          _count: { select: { users: true } },
+        },
+      }),
+      this.prisma.dailyMood.aggregate({
+        where: { tenantId, date: { gte: last30Days } },
+        _avg: { mood: true },
+        _count: { mood: true },
+      }),
+      this.prisma.dailyMood.count({ where: { tenantId, date: today } }),
+      this.prisma.dailyQuestionnaireAnswer.count({
+        where: { tenantId, filledAt: null, isActive: true },
+      }),
+      this.prisma.dailyMood.findMany({
+        where: { tenantId },
+        orderBy: [{ date: 'desc' }, { updatedAt: 'desc' }],
+        take: 20,
+        select: {
+          id: true,
+          date: true,
+          mood: true,
+          comment: true,
+          updatedAt: true,
+          user: { select: { id: true, firstName: true, lastName: true, email: true } },
+        },
+      }),
+      this.prisma.dailyQuestionDispatch.findMany({
+        where: { tenantId },
+        orderBy: { sentAt: 'desc' },
+        take: 20,
+        select: {
+          id: true,
+          campaignKey: true,
+          sentOn: true,
+          sentAt: true,
+          audienceType: true,
+          pushSent: true,
+          question: { select: { id: true, topic: true, question: true } },
+          _count: { select: { answers: true } },
+        },
+      }),
+      this.prisma.notificationJob.findMany({
+        where: { tenantId },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        select: {
+          id: true,
+          type: true,
+          status: true,
+          errorMessage: true,
+          scheduledFor: true,
+          createdAt: true,
+          processedAt: true,
+          user: { select: { id: true, firstName: true, lastName: true, email: true } },
+        },
+      }),
+      this.prisma.dailyQuestionSchedule.groupBy({
+        by: ['campaignKey'],
+        where: { tenantId, campaignKey: { not: null } },
+        _count: { id: true },
+      }),
+      this.prisma.activityEvent.findMany({
+        where: { tenantId },
+        orderBy: { createdAt: 'desc' },
+        take: 30,
+        include: {
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+              role: true,
+            },
+          },
+        },
+      }),
+      this.prisma.supportSession.findMany({
+        where: { tenantId },
+        orderBy: { startedAt: 'desc' },
+        take: 12,
+        include: {
+          platformAdmin: { select: { id: true, name: true, email: true } },
+          _count: { select: { activities: true } },
+        },
+      }),
+    ]);
+
+    return {
+      tenant,
+      overview: {
+        users: {
+          active: activeUsers,
+          inactive: inactiveUsers,
+          total: activeUsers + inactiveUsers,
+          admins: adminUsers,
+          leaders: leaderUsers,
+        },
+        positions: positions.length,
+        devices: tenant._count.devices,
+        dailyMood: {
+          todayAnswers: todayMoods,
+          last30DaysAnswers: moodStats._count.mood,
+          last30DaysAverage: moodStats._avg.mood
+            ? Number(moodStats._avg.mood.toFixed(2))
+            : null,
+        },
+        dailyQuestions: {
+          schedules: tenant._count.dailyQuestionSchedules,
+          dispatches: tenant._count.dailyQuestionDispatches,
+          answers: tenant._count.dailyQuestionAnswers,
+          pendingAnswers,
+          campaigns: campaignGroups.length,
+        },
+      },
+      users,
+      positions,
+      recentMoods,
+      recentDispatches,
+      notificationJobs,
+      recentActivity,
+      supportSessions,
+      campaigns: campaignGroups.map((group) => ({
+        campaignKey: group.campaignKey,
+        scheduleCount: group._count.id,
+      })),
+    };
+  }
+
+  async updateTenantUser(
+    tenantId: string,
+    userId: string,
+    input: {
+      role?: UserRole;
+      isLeader?: boolean;
+      isDeleted?: boolean;
+      positionId?: string | null;
+    },
+    actor?: any,
+    req?: any,
+  ) {
+    const user = await this.prisma.user.findFirst({ where: { id: userId, tenantId } });
+    if (!user) throw new NotFoundException('User nem talÃ¡lhatÃ³.');
+
+    const data: any = {};
+
+    if (input.role !== undefined) {
+      if (!Object.values(UserRole).includes(input.role)) {
+        throw new BadRequestException('Ã‰rvÃ©nytelen szerepkÃ¶r.');
+      }
+
+      if (user.role === UserRole.ADMIN && input.role !== UserRole.ADMIN) {
+        await this.assertTenantKeepsAdmin(tenantId, userId);
+      }
+
+      data.role = input.role;
+      data.isLeader = input.role === UserRole.LEADER ? true : input.isLeader;
+    }
+
+    if (input.isLeader !== undefined && input.role === undefined) {
+      data.isLeader = !!input.isLeader;
+    }
+
+    if (input.isDeleted !== undefined) {
+      if (input.isDeleted && user.role === UserRole.ADMIN) {
+        await this.assertTenantKeepsAdmin(tenantId, userId);
+      }
+      data.isDeleted = !!input.isDeleted;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, 'positionId')) {
+      if (input.positionId) {
+        const position = await this.prisma.position.findFirst({
+          where: { id: input.positionId, tenantId, isDeleted: false },
+          select: { id: true },
+        });
+        if (!position) throw new BadRequestException('Ã‰rvÃ©nytelen pozÃ­ciÃ³.');
+      }
+      data.positionId = input.positionId ?? null;
+    }
+
+    if (Object.keys(data).length === 0) {
+      throw new BadRequestException('Nincs mÃ³dosÃ­tandÃ³ adat.');
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data,
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        role: true,
+        isLeader: true,
+        isDeleted: true,
+        updatedAt: true,
+        positionId: true,
+        position: { select: { id: true, name: true } },
+      },
+    });
+
+    await this.activity.log({
+      tenantId,
+      userId,
+      event: 'SUPER_ADMIN_USER_UPDATED',
+      source: 'super-admin',
+      entityType: 'USER',
+      entityId: userId,
+      actor: { type: 'PLATFORM_ADMIN', id: actor?.sub ?? null },
+      supportSessionId: await this.resolveSupportSessionId(tenantId, actor?.sub, req),
+      metadata: {
+        changed: Object.keys(data),
+        before: {
+          role: user.role,
+          isLeader: user.isLeader,
+          isDeleted: user.isDeleted,
+          positionId: user.positionId,
+        },
+        after: {
+          role: updated.role,
+          isLeader: updated.isLeader,
+          isDeleted: updated.isDeleted,
+          positionId: updated.positionId,
+        },
+      },
+      request: this.activity.requestMeta(req),
+    });
+
+    return updated;
+  }
+
+  async listTenantActivity(tenantId: string, query: any) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { id: true },
+    });
+    if (!tenant) throw new NotFoundException('Tenant nem talÃ¡lhatÃ³.');
+
+    const maxLimit = query?._export ? 1000 : 200;
+    const limit = Math.min(Math.max(Number(query?.limit ?? 80), 1), maxLimit);
+    const where: any = { tenantId };
+    if (query?.event) where.event = String(query.event);
+    if (query?.category) where.category = String(query.category);
+    if (query?.userId) where.userId = String(query.userId);
+    if (query?.entityType) where.entityType = String(query.entityType);
+    if (query?.entityId) where.entityId = String(query.entityId);
+    if (query?.supportSessionId) where.supportSessionId = String(query.supportSessionId);
+    if (query?.from || query?.to) {
+      where.createdAt = {};
+      if (query.from) where.createdAt.gte = new Date(query.from);
+      if (query.to) where.createdAt.lte = new Date(query.to);
+    }
+
+    return this.prisma.activityEvent.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      include: {
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            role: true,
+          },
+        },
+        supportSession: {
+          include: {
+            platformAdmin: { select: { id: true, name: true, email: true } },
+          },
+        },
+      },
+    });
+  }
+
+  async exportTenantActivityCsv(tenantId: string, query: any) {
+    const rows = await this.listTenantActivity(tenantId, {
+      ...query,
+      limit: query?.limit ?? 1000,
+      _export: true,
+    });
+
+    const header = [
+      'createdAt',
+      'category',
+      'event',
+      'source',
+      'user',
+      'userEmail',
+      'entityType',
+      'entityId',
+      'supportSessionId',
+      'supportAdmin',
+      'ipAddress',
+      'metadata',
+    ];
+
+    const lines = rows.map((row: any) => [
+      row.createdAt?.toISOString?.() ?? row.createdAt,
+      row.category,
+      row.event,
+      row.source,
+      row.user ? `${row.user.lastName} ${row.user.firstName}` : '',
+      row.user?.email ?? '',
+      row.entityType ?? '',
+      row.entityId ?? '',
+      row.supportSessionId ?? '',
+      row.supportSession?.platformAdmin?.email ?? '',
+      row.ipAddress ?? '',
+      JSON.stringify(row.metadata ?? {}),
+    ]);
+
+    return [header, ...lines]
+      .map((line) => line.map((cell) => this.csvCell(cell)).join(','))
+      .join('\n');
+  }
+
+  async startSupportSession(
+    tenantId: string,
+    input: { reason?: string },
+    actor: any,
+    req?: any,
+  ) {
+    await this.ensureTenant(tenantId);
+
+    const session = await this.prisma.supportSession.create({
+      data: {
+        tenantId,
+        platformAdminId: actor.sub,
+        reason: input.reason?.trim() || null,
+      },
+      include: {
+        platformAdmin: { select: { id: true, name: true, email: true } },
+        _count: { select: { activities: true } },
+      },
+    });
+
+    await this.activity.log({
+      tenantId,
+      event: 'SUPER_ADMIN_SUPPORT_SESSION_STARTED',
+      source: 'super-admin',
+      entityType: 'SUPPORT_SESSION',
+      entityId: session.id,
+      supportSessionId: session.id,
+      actor: { type: 'PLATFORM_ADMIN', id: actor.sub },
+      metadata: { reason: session.reason },
+      request: this.activity.requestMeta(req),
+    });
+
+    return session;
+  }
+
+  async closeSupportSession(tenantId: string, sessionId: string, actor: any, req?: any) {
+    const session = await this.prisma.supportSession.findFirst({
+      where: { id: sessionId, tenantId, platformAdminId: actor.sub },
+    });
+    if (!session) throw new NotFoundException('Support session nem talalhato.');
+
+    const closed = await this.prisma.supportSession.update({
+      where: { id: sessionId },
+      data: { status: 'closed', endedAt: new Date() },
+      include: {
+        platformAdmin: { select: { id: true, name: true, email: true } },
+        _count: { select: { activities: true } },
+      },
+    });
+
+    await this.activity.log({
+      tenantId,
+      event: 'SUPER_ADMIN_SUPPORT_SESSION_CLOSED',
+      source: 'super-admin',
+      entityType: 'SUPPORT_SESSION',
+      entityId: sessionId,
+      supportSessionId: sessionId,
+      actor: { type: 'PLATFORM_ADMIN', id: actor.sub },
+      metadata: { reason: session.reason },
+      request: this.activity.requestMeta(req),
+    });
+
+    return closed;
+  }
+
+  async listSupportSessions(tenantId: string) {
+    await this.ensureTenant(tenantId);
+    return this.prisma.supportSession.findMany({
+      where: { tenantId },
+      orderBy: { startedAt: 'desc' },
+      take: 50,
+      include: {
+        platformAdmin: { select: { id: true, name: true, email: true } },
+        _count: { select: { activities: true } },
+      },
+    });
+  }
+
+  async getTenantActivityDashboard(tenantId: string, query: any) {
+    await this.ensureTenant(tenantId);
+    const days = Math.min(Math.max(Number(query?.days ?? 30), 1), 90);
+    const since = this.daysAgo(days - 1);
+
+    const [byCategory, byEvent, recentUsers, activeUsers, timelineRows] =
+      await Promise.all([
+        this.prisma.activityEvent.groupBy({
+          by: ['category'],
+          where: { tenantId, createdAt: { gte: since } },
+          _count: { id: true },
+        }),
+        this.prisma.activityEvent.groupBy({
+          by: ['event'],
+          where: { tenantId, createdAt: { gte: since } },
+          _count: { id: true },
+          orderBy: { _count: { id: 'desc' } },
+          take: 12,
+        }),
+        this.prisma.activityEvent.findMany({
+          where: { tenantId, userId: { not: null }, createdAt: { gte: since } },
+          distinct: ['userId'],
+          select: { userId: true },
+        }),
+        this.prisma.user.count({ where: { tenantId, isDeleted: false } }),
+        this.prisma.activityEvent.findMany({
+          where: { tenantId, createdAt: { gte: since } },
+          select: { createdAt: true, category: true },
+          orderBy: { createdAt: 'asc' },
+        }),
+      ]);
+
+    const timeline = this.reduceDailyTimeline(timelineRows, days);
+
+    return {
+      range: { days, since },
+      totals: {
+        events: timelineRows.length,
+        activeUsers,
+        activeUsersWithActivity: recentUsers.length,
+      },
+      byCategory: byCategory.map((row) => ({
+        category: row.category,
+        count: row._count.id,
+      })),
+      topEvents: byEvent.map((row) => ({ event: row.event, count: row._count.id })),
+      timeline,
+    };
+  }
+
+  async getTenantActivityAlerts(tenantId: string) {
+    await this.ensureTenant(tenantId);
+    const oneHourAgo = this.hoursAgo(1);
+    const dayAgo = this.hoursAgo(24);
+
+    const [
+      failedLogins,
+      notificationErrors,
+      appAccessDisabled,
+      supportSessions,
+    ] = await Promise.all([
+      this.prisma.activityEvent.count({
+        where: {
+          tenantId,
+          event: 'AUTH_LOGIN_FAILED',
+          createdAt: { gte: oneHourAgo },
+        },
+      }),
+      this.prisma.notificationJob.count({
+        where: {
+          tenantId,
+          status: 'failed',
+          createdAt: { gte: oneHourAgo },
+        },
+      }),
+      this.prisma.activityEvent.count({
+        where: {
+          tenantId,
+          event: 'SUPER_ADMIN_TENANT_APP_DISABLED',
+          createdAt: { gte: dayAgo },
+        },
+      }),
+      this.prisma.supportSession.count({
+        where: {
+          tenantId,
+          status: 'active',
+          startedAt: { lt: this.hoursAgo(8) },
+        },
+      }),
+    ]);
+
+    return [
+      {
+        id: 'failed-logins',
+        severity: failedLogins >= 10 ? 'critical' : failedLogins >= 5 ? 'warning' : 'ok',
+        title: 'Sikertelen loginok',
+        value: failedLogins,
+        detail: 'Az utolso 1 oraban.',
+      },
+      {
+        id: 'notification-errors',
+        severity: notificationErrors >= 5 ? 'critical' : notificationErrors > 0 ? 'warning' : 'ok',
+        title: 'Notification hibak',
+        value: notificationErrors,
+        detail: 'Failed notification jobok az utolso 1 oraban.',
+      },
+      {
+        id: 'app-disabled',
+        severity: appAccessDisabled > 0 ? 'warning' : 'ok',
+        title: 'App hozzaferes tiltasa',
+        value: appAccessDisabled,
+        detail: 'Az utolso 24 oraban.',
+      },
+      {
+        id: 'long-support-session',
+        severity: supportSessions > 0 ? 'warning' : 'ok',
+        title: 'Hosszu support session',
+        value: supportSessions,
+        detail: '8 oranal regebbi aktiv session.',
+      },
+    ];
+  }
+
+  cleanupActivityRetention(input: { appDays?: number; auditDays?: number; systemDays?: number }) {
+    return this.activityMaintenance.cleanup(input);
+  }
+
+  listContentSurfaces() {
+    return this.content.listSurfaces();
+  }
+
+  listContentTopics() {
+    return this.content.listTopics();
+  }
+
+  listContentItems(query: any) {
+    return this.content.listAll(query);
+  }
+
+  createContentItem(input: any) {
+    return this.content.createItem(input);
+  }
+
+  updateContentItem(id: string, input: any) {
+    return this.content.updateItem(id, input);
+  }
+
+  archiveContentItem(id: string) {
+    return this.content.archiveItem(id);
+  }
+
+  deleteContentItem(id: string) {
+    return this.content.deleteItem(id);
+  }
+
+  getTenantUsage(tenantId: string, query: any) {
+    return this.usage.getTenantSummary(tenantId, Number(query?.days ?? 7));
   }
 
   async listCampaigns() {
@@ -206,7 +1142,11 @@ export class SuperAdminService {
     return { count: users.length };
   }
 
-  async sendPush(input: { title: string; body: string; filters: PushFilters }) {
+  async sendPush(
+    input: { title: string; body: string; filters: PushFilters },
+    actor?: any,
+    req?: any,
+  ) {
     if (!input.title?.trim() || !input.body?.trim()) {
       throw new BadRequestException('A cím és szöveg kötelező.');
     }
@@ -222,6 +1162,25 @@ export class SuperAdminService {
           payload: { title: input.title, body: input.body },
         }),
       );
+    }
+
+    const tenantIds = [...new Set(users.map((user) => user.tenantId))];
+    for (const tenantId of tenantIds) {
+      await this.activity.log({
+        tenantId,
+        event: 'SUPER_ADMIN_PUSH_SENT',
+        source: 'super-admin',
+        entityType: 'PUSH',
+        entityId: null,
+        actor: { type: 'PLATFORM_ADMIN', id: actor?.sub ?? null },
+        supportSessionId: await this.resolveSupportSessionId(tenantId, actor?.sub, req),
+        metadata: {
+          title: input.title,
+          filters: input.filters ?? {},
+          targetedUsers: users.filter((user) => user.tenantId === tenantId).length,
+        },
+        request: this.activity.requestMeta(req),
+      });
     }
 
     return { targetedUsers: users.length, queuedJobs: jobs.length };
@@ -256,5 +1215,82 @@ export class SuperAdminService {
       where,
       select: { id: true, tenantId: true },
     });
+  }
+
+  private async resolveSupportSessionId(tenantId: string, adminId?: string, req?: any) {
+    const sessionId = req?.headers?.['x-support-session-id'];
+    if (!sessionId || !adminId) return null;
+
+    const session = await this.prisma.supportSession.findFirst({
+      where: {
+        id: String(sessionId),
+        tenantId,
+        platformAdminId: adminId,
+        status: 'active',
+      },
+      select: { id: true },
+    });
+
+    return session?.id ?? null;
+  }
+
+  private async ensureTenant(tenantId: string) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { id: true },
+    });
+    if (!tenant) throw new NotFoundException('Tenant nem talalhato.');
+    return tenant;
+  }
+
+  private csvCell(value: any) {
+    const text = String(value ?? '');
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+
+  private daysAgo(days: number) {
+    const date = new Date();
+    date.setDate(date.getDate() - days);
+    date.setHours(0, 0, 0, 0);
+    return date;
+  }
+
+  private hoursAgo(hours: number) {
+    const date = new Date();
+    date.setHours(date.getHours() - hours);
+    return date;
+  }
+
+  private reduceDailyTimeline(rows: Array<{ createdAt: Date; category: string }>, days: number) {
+    const map = new Map<string, any>();
+    for (let i = days - 1; i >= 0; i -= 1) {
+      const date = this.daysAgo(i).toISOString().slice(0, 10);
+      map.set(date, { date, total: 0, AUDIT: 0, APP: 0, SYSTEM: 0 });
+    }
+
+    for (const row of rows) {
+      const date = row.createdAt.toISOString().slice(0, 10);
+      const item = map.get(date);
+      if (!item) continue;
+      item.total += 1;
+      item[row.category] = (item[row.category] ?? 0) + 1;
+    }
+
+    return [...map.values()];
+  }
+
+  private async assertTenantKeepsAdmin(tenantId: string, excludedUserId: string) {
+    const activeAdminCount = await this.prisma.user.count({
+      where: {
+        tenantId,
+        role: UserRole.ADMIN,
+        isDeleted: false,
+        id: { not: excludedUserId },
+      },
+    });
+
+    if (activeAdminCount < 1) {
+      throw new BadRequestException('Az utolsÃ³ aktÃ­v adminisztrÃ¡tor nem mÃ³dosÃ­thatÃ³.');
+    }
   }
 }

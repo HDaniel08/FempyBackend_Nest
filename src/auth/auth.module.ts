@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import type { StringValue } from 'ms'; // ✅ ez a "7d" típus
 
 import { UsersModule } from '../users/users.module';
+import { ActivityModule } from '../activity/activity.module';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
@@ -11,6 +12,7 @@ import { JwtStrategy } from './jwt.strategy';
 @Module({
   imports: [
     UsersModule,
+    ActivityModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {

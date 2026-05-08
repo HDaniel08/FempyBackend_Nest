@@ -49,6 +49,8 @@ model Tenant {
   devices    UserDevice[]
   moods      DailyMood[]
   activities ActivityEvent[]
+  supportSessions SupportSession[]
+  appUsageSessions AppUsageSession[]
   notifJobs  NotificationJob[]
   profiles   UserProfile[]
 
@@ -71,7 +73,80 @@ model PlatformAdmin {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
+  supportSessions SupportSession[]
+
   @@map("platform_admins")
+}
+
+model SupportSession {
+  id              String    @id @default(uuid())
+  tenantId        String    @map("tenant_id")
+  platformAdminId String    @map("platform_admin_id")
+  reason          String?
+  status          String    @default("active")
+  startedAt       DateTime  @default(now()) @map("started_at")
+  endedAt         DateTime? @map("ended_at")
+
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  platformAdmin PlatformAdmin @relation(fields: [platformAdminId], references: [id], onDelete: Cascade)
+  activities    ActivityEvent[]
+
+  @@index([tenantId, status, startedAt(sort: Desc)])
+  @@index([platformAdminId, startedAt(sort: Desc)])
+  @@map("support_sessions")
+}
+
+model ContentSurface {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  name        String
+  description String?
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  items ContentItem[]
+
+  @@map("content_surfaces")
+}
+
+model ContentTopic {
+  id          String   @id @default(uuid())
+  slug        String   @unique
+  name        String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  items ContentItem[]
+
+  @@map("content_topics")
+}
+
+model ContentItem {
+  id          String   @id @default(uuid())
+  surfaceId   String   @map("surface_id")
+  topicId     String?  @map("topic_id")
+  title       String
+  description String   @db.Text
+  type        String
+  duration    Int
+  url         String
+  source      String
+  thumbnail   String?
+  status      String   @default("published")
+  language    String   @default("hu")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  surface ContentSurface @relation(fields: [surfaceId], references: [id], onDelete: Cascade)
+  topic   ContentTopic?  @relation(fields: [topicId], references: [id], onDelete: SetNull)
+
+  @@index([surfaceId, status, sortOrder])
+  @@index([topicId])
+  @@index([type])
+  @@map("content_items")
 }
 
 model OrganizationSettings {
@@ -151,6 +226,7 @@ model User {
   devices    UserDevice[]
   moods      DailyMood[]
   activities ActivityEvent[]
+  appUsageSessions AppUsageSession[]
   answers    DailyQuestionnaireAnswer[]
   notifJobs  NotificationJob[]
   userGoals  UserGoal[]
@@ -378,16 +454,54 @@ model DailyQuestionnaireAnswer {
 model ActivityEvent {
   id        String   @id @default(uuid())
   tenantId  String   @map("tenant_id")
-  userId    String   @map("user_id")
+  userId    String?  @map("user_id")
   event     String
+  category  String   @default("APP")
+  source    String   @default("api")
+  entityType String? @map("entity_type")
+  entityId   String? @map("entity_id")
+  supportSessionId String? @map("support_session_id")
+  metadata   Json?
+  ipAddress  String? @map("ip_address")
+  userAgent  String? @map("user_agent")
   createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+  supportSession SupportSession? @relation(fields: [supportSessionId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([tenantId, userId, createdAt(sort: Desc)])
+  @@index([tenantId, category, createdAt(sort: Desc)])
+  @@index([tenantId, event, createdAt(sort: Desc)])
+  @@index([tenantId, entityType, entityId])
+  @@index([tenantId, supportSessionId, createdAt(sort: Desc)])
+  @@map("activity_events")
+}
+
+model AppUsageSession {
+  id              String    @id @default(uuid())
+  tenantId        String    @map("tenant_id")
+  userId          String    @map("user_id")
+  startedAt       DateTime  @default(now()) @map("started_at")
+  lastSeenAt      DateTime  @default(now()) @map("last_seen_at")
+  endedAt         DateTime? @map("ended_at")
+  durationSeconds Int       @default(0) @map("duration_seconds")
+  heartbeatCount  Int       @default(0) @map("heartbeat_count")
+  platform        String?
+  appVersion      String?   @map("app_version")
+  status          String    @default("active")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([tenantId, createdAt(sort: Desc)])
-  @@index([tenantId, userId, createdAt(sort: Desc)])
-  @@map("activity_events")
+  @@index([tenantId, startedAt(sort: Desc)])
+  @@index([tenantId, userId, startedAt(sort: Desc)])
+  @@index([tenantId, durationSeconds(sort: Desc)])
+  @@index([tenantId, status, lastSeenAt])
+  @@map("app_usage_sessions")
 }
 
 model UserDevice {
