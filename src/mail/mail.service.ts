@@ -64,6 +64,15 @@ export class MailService {
         port,
         secure,
         requireTLS: !secure && port === 587,
+        connectionTimeout: Number(
+          this.config.get<string>('SMTP_CONNECTION_TIMEOUT_MS') ?? 10000,
+        ),
+        greetingTimeout: Number(
+          this.config.get<string>('SMTP_GREETING_TIMEOUT_MS') ?? 10000,
+        ),
+        socketTimeout: Number(
+          this.config.get<string>('SMTP_SOCKET_TIMEOUT_MS') ?? 20000,
+        ),
         auth: {
           user: this.getRequiredConfig('SMTP_USER'),
           pass: this.getRequiredConfig('SMTP_PASSWORD'),
