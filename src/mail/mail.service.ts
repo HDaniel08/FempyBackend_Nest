@@ -58,9 +58,14 @@ export class MailService {
     if (!this.transporter) {
       const port = Number(this.config.get<string>('SMTP_PORT') ?? 587);
       const secure = this.config.get<string>('SMTP_SECURE') === 'true';
+      const host = this.getRequiredConfig('SMTP_HOST');
+
+      this.logger.log(
+        `SMTP transporter init: host=${host}, port=${port}, secure=${secure}, user=${this.getRequiredConfig('SMTP_USER')}`,
+      );
 
       this.transporter = nodemailer.createTransport({
-        host: this.getRequiredConfig('SMTP_HOST'),
+        host,
         port,
         secure,
         requireTLS: !secure && port === 587,
