@@ -1,4 +1,3 @@
-
 import { ConfigModule } from '@nestjs/config';
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { PrismaModule } from './prisma/prisma.module';
@@ -20,18 +19,36 @@ import { AdminModule } from './admin/admin.module';
 import { SuperAdminModule } from './super-admin/super-admin.module';
 import { ContentModule } from './content/content.module';
 import { UsageModule } from './usage/usage.module';
+import { MailModule } from './mail/mail.module';
 
 @Module({
-  imports: [ ConfigModule.forRoot({
+  imports: [
+    ConfigModule.forRoot({
       isGlobal: true, // így nem kell minden modulba importálni
-    }),PrismaModule,PublicModule, HealthModule, TenantsModule, UsersModule, AuthModule, DevicesModule, NotificationsModule,DailyMoodModule,DailyQuestionsModule,PositionsModule,AdminModule,SuperAdminModule,ContentModule,UsageModule,
-     
+    }),
+    PrismaModule,
+    PublicModule,
+    HealthModule,
+    TenantsModule,
+    UsersModule,
+    AuthModule,
+    DevicesModule,
+    NotificationsModule,
+    DailyMoodModule,
+    DailyQuestionsModule,
+    PositionsModule,
+    AdminModule,
+    SuperAdminModule,
+    ContentModule,
+    UsageModule,
+    MailModule,
+
     ServeStaticModule.forRoot({
       rootPath: join(process.cwd(), 'uploads'),
       serveRoot: '/uploads',
     }),
     // ...
-],
+  ],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

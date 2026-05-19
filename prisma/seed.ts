@@ -1,117 +1,420 @@
-import {
-  DailyQuestion,
-  DailyQuestionType,
-  PrismaClient,
-  User,
-  UserRole,
-} from '@prisma/client';
+import { DailyQuestionType, PrismaClient, UserRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
-/**
- * Demo seed:
- * - létrehoz egy demo tenantot (slug: demo)
- * - létrehoz egy demo pozíciót (root)
- * - létrehoz egy demo usert (email: demo@demo.hu)
- * - opcionálisan létrehoz user profilt is
- *
- * Futtatás:
- *   npx prisma db seed
- */
 const prisma = new PrismaClient();
 
-const SCALE_EXTENT = [
-  'nagyon nagy mértékben',
-  'nagymértékben',
-  'valamelyest',
-  'kismértékben',
-  'nagyon kis mértékben',
+const CAMPAIGN_KEY = 'pszichoszocialis-kockazatelemzes';
+const CAMPAIGN_NAME = 'Pszichoszociális kockázatelemzés';
+
+const FREQ = ['Mindig', 'Gyakran', 'Időnként', 'Ritkán', 'Soha /szinte soha'];
+const EXTENT = [
+  'Nagyon nagy mértékben',
+  'Nagymértékben',
+  'Valamelyest',
+  'Kismértékben',
+  'Nagyon kis mértékben',
+];
+const EXTENT_NO_MANAGER = [...EXTENT, 'Nincs közvetlen felettesem'];
+const FREQ_NO_MANAGER = [...FREQ, 'Nincs közvetlen felettesem'];
+const FREQ_NO_COWORKERS = [...FREQ, 'Nincsenek munkatársaim'];
+const SATISFACTION = [
+  'Nagyon elégedett',
+  'Elégedett',
+  'Semleges',
+  'Elégedetlen',
+  'Nagyon elégedetlen',
+];
+const TIME_PART = [
+  'Állandóan',
+  'Az idő nagy részében',
+  'Az idő egy részében',
+  'Az idő kis részében',
+  'Egyáltalán nem',
+];
+const HEALTH = ['Kitűnő', 'Nagyon jó', 'Jó', 'Tűrhető', 'Rossz'];
+const YES_FREQUENCY = [
+  'Igen, napi rendszerességgel',
+  'Igen, heti rendszerességgel',
+  'Igen, havi rendszerességgel',
+  'Igen, néhány alkalommal',
+  'Nem',
 ];
 
-const SCALE_FREQUENCY = [
-  'mindig',
-  'gyakran',
-  'néha',
-  'ritkán',
-  'soha vagy szinte soha',
-];
-
-const questions = [
-  {
-    topic: 'elismerés',
-    question: 'Elismerik a munkámat ezen a munkahelyen.',
-    answerOptions: SCALE_EXTENT,
-    type: DailyQuestionType.SINGLE_CHOICE_5,
-  },
-  {
-    topic: 'elismerés',
-    question: 'Méltányolják a képességeimet és erőfeszítéseimet.',
-    answerOptions: SCALE_EXTENT,
-    type: DailyQuestionType.SINGLE_CHOICE_5,
-  },
-  {
-    topic: 'vezetői tisztelet',
-    question: 'A közvetlen vezetőm tisztelettel bánik velem.',
-    answerOptions: SCALE_EXTENT,
-    type: DailyQuestionType.SINGLE_CHOICE_5,
-  },
-  {
-    topic: 'vezetői figyelem',
-    question:
-      'A közvetlen vezetőm figyelmesen meghallgat, ha egy problémával hozzá fordulok.',
-    answerOptions: SCALE_FREQUENCY,
-    type: DailyQuestionType.SINGLE_CHOICE_5,
-  },
-  {
-    topic: 'vezetői támogatás',
-    question: 'A közvetlen vezetőm támogat, amikor szükségem van rá.',
-    answerOptions: SCALE_FREQUENCY,
-    type: DailyQuestionType.SINGLE_CHOICE_5,
-  },
-  {
-    topic: 'visszajelzés',
-    question:
-      'A közvetlen vezetőmtől gyakran kapok visszajelzéseket arról, hogy jól dolgozom.',
-    answerOptions: SCALE_FREQUENCY,
-    type: DailyQuestionType.SINGLE_CHOICE_5,
-  },
-];
-
-const REPORT_DEMO_CAMPAIGN_KEY = 'demo-wellbeing-2026-05';
-const RECOGNITION_DEMO_CAMPAIGN_KEY = 'demo-recognition-2026-05';
-const RECOGNITION_PENDING_CAMPAIGN_KEY = 'demo-recognition-pending-2026-05';
-const RECOGNITION_DEMO_TOPIC = 'elismerés';
-
-const REPORT_DEMO_TOPIC = {
-  name: 'Munkahelyi jólét demo',
-  slug: 'munkahelyi-jollet-demo',
+type SeedQuestion = {
+  topic: string;
+  campaignDay: number;
+  question: string;
+  answerOptions: string[];
 };
 
-const REPORT_DEMO_QUESTIONS = [
+const PSYCHOSOCIAL_QUESTIONS: SeedQuestion[] = [
   {
-    question: 'Úgy érzem, hogy van energiám a napi munkafeladataimhoz.',
-    hungarianNorm: '3.70',
-    hungarianStd: '0.80',
+    topic: 'Mennyiségi elvárás',
+    campaignDay: 1,
+    question:
+      'Jellemző-e a munkádra, hogy egyenlőtlenül van elosztva, ezért az elvégzendő feladatok felhalmozódnak?',
+    answerOptions: FREQ,
   },
   {
-    question: 'A munkám során megélem, hogy van ráhatásom a feladataimra.',
-    hungarianNorm: '3.45',
-    hungarianStd: '0.90',
+    topic: 'Mennyiségi elvárás',
+    campaignDay: 1,
+    question:
+      'Milyen gyakran fordul elő, hogy nincs időd minden feladatod elvégzésére?',
+    answerOptions: FREQ,
   },
   {
-    question: 'A csapatomban biztonságosan tudok visszajelzést adni.',
-    hungarianNorm: '3.20',
-    hungarianStd: '1.00',
+    topic: 'Mennyiségi elvárás',
+    campaignDay: 1,
+    question: 'Elő szokott-e fordulni, hogy elmaradásaid vannak a munkáddal?',
+    answerOptions: FREQ,
+  },
+  {
+    topic: 'Munkatempó',
+    campaignDay: 2,
+    question: 'Nagyon gyorsan kell dolgoznod?',
+    answerOptions: FREQ,
+  },
+  {
+    topic: 'Munkatempó',
+    campaignDay: 2,
+    question: 'Egész nap nagyon tempósan kell-e dolgoznod?',
+    answerOptions: EXTENT,
+  },
+  {
+    topic: 'Érzelmi megterhelés',
+    campaignDay: 3,
+    question:
+      'Kerülsz-e a munkád folytán olyan helyzetekbe, melyek érzelmileg zavaróak, felkavaróak?',
+    answerOptions: FREQ,
+  },
+  {
+    topic: 'Érzelmi megterhelés',
+    campaignDay: 3,
+    question:
+      'Munkád részeként kell-e foglalkoznod más emberek személyes problémáival?',
+    answerOptions: FREQ,
+  },
+  {
+    topic: 'Érzelmi megterhelés',
+    campaignDay: 3,
+    question: 'Érzelmileg megterhelő-e a munkád?',
+    answerOptions: EXTENT,
+  },
+  {
+    topic: 'Hatáskör (Kontroll)',
+    campaignDay: 4,
+    question: 'Jelentős mértékben képes vagy-e befolyásolni a munkádat?',
+    answerOptions: FREQ,
+  },
+  {
+    topic: 'Hatáskör (Kontroll)',
+    campaignDay: 4,
+    question: 'Tudod-e befolyásolni, hogy mennyi munkát kell elvégezned?',
+    answerOptions: FREQ,
+  },
+  {
+    topic: 'Hatáskör (Kontroll)',
+    campaignDay: 4,
+    question: 'Van-e befolyásod arra, hogy milyen munkát végzel?',
+    answerOptions: FREQ,
+  },
+  {
+    topic: 'Fejlődési lehetőségek',
+    campaignDay: 5,
+    question: 'Van-e lehetőséged a munkád révén új dolgokat tanulni?',
+    answerOptions: EXTENT,
+  },
+  {
+    topic: 'Fejlődési lehetőségek',
+    campaignDay: 5,
+    question:
+      'Tudod-e hasznosítani képességeidet vagy szakértelmedet a munkád során?',
+    answerOptions: EXTENT,
+  },
+  {
+    topic: 'Fejlődési lehetőségek',
+    campaignDay: 5,
+    question:
+      'Nyújt-e lehetőséget a munkád arra, hogy fejleszd készségeidet, tudásodat?',
+    answerOptions: EXTENT,
+  },
+  {
+    topic: 'A munka értelmessége',
+    campaignDay: 6,
+    question: 'Értelmes munkát végzel-e?',
+    answerOptions: EXTENT,
+  },
+  {
+    topic: 'A munka értelmessége',
+    campaignDay: 6,
+    question: 'Fontosnak érzed-e a munkát, amit végzel?',
+    answerOptions: EXTENT,
+  },
+  {
+    topic: 'Előreláthatóság',
+    campaignDay: 7,
+    question:
+      'Jó előre értesítenek-e Téged a munkahelyeden a fontosabb döntésekről, változásokról vagy jövőbeni tervekről?',
+    answerOptions: EXTENT,
+  },
+  {
+    topic: 'Előreláthatóság',
+    campaignDay: 7,
+    question:
+      'Megkapsz-e minden szükséges információt ahhoz, hogy jól tudd végezni a munkádat?',
+    answerOptions: EXTENT,
+  },
+  {
+    topic: 'Jutalmazás, elismerés',
+    campaignDay: 8,
+    question: 'Elismeri-e és értékeli-e a vezetőség a munkádat?',
+    answerOptions: EXTENT,
+  },
+  {
+    topic: 'Munkakör egyértelműsége',
+    campaignDay: 9,
+    question: 'Világosak a célkitűzések a munkádban?',
+    answerOptions: EXTENT,
+  },
+  {
+    topic: 'Munkakör egyértelműsége',
+    campaignDay: 9,
+    question:
+      'Tudod-e pontosan, hogy mely területek tartoznak a Te felelősségi körödbe?',
+    answerOptions: EXTENT,
+  },
+  {
+    topic: 'Munkakör egyértelműsége',
+    campaignDay: 9,
+    question: 'Tudod-e, hogy pontosan mit várnak el Tőled a munkádban?',
+    answerOptions: EXTENT,
+  },
+  {
+    topic: 'Szerepkonfliktus',
+    campaignDay: 10,
+    question:
+      'Meg kell-e felelned egymással ellentétes elvárásoknak a munkában?',
+    answerOptions: EXTENT,
+  },
+  {
+    topic: 'Szerepkonfliktus',
+    campaignDay: 10,
+    question:
+      'Kell-e időnként olyan dolgokat tenned, amelyeket igazából másként kellene csinálni?',
+    answerOptions: EXTENT,
+  },
+  {
+    topic: 'A vezetés minősége',
+    campaignDay: 11,
+    question:
+      'Szerinted a közvetlen felettesed mennyire biztosít az egyes munkatársak számára megfelelő fejlődési lehetőségeket?',
+    answerOptions: EXTENT_NO_MANAGER,
+  },
+  {
+    topic: 'A vezetés minősége',
+    campaignDay: 11,
+    question:
+      'Szerinted a közvetlen felettesed mennyire tervezi meg jól a munkát?',
+    answerOptions: EXTENT_NO_MANAGER,
+  },
+  {
+    topic: 'A vezetés minősége',
+    campaignDay: 11,
+    question:
+      'Szerinted a közvetlen felettesed mennyire oldja meg jól a konfliktusokat?',
+    answerOptions: EXTENT_NO_MANAGER,
+  },
+  {
+    topic: 'Támogatás a felettestől',
+    campaignDay: 12,
+    question:
+      'Milyen gyakran hajlandó a közvetlen felettesed meghallgatni munkával kapcsolatos problémáidat?',
+    answerOptions: FREQ_NO_MANAGER,
+  },
+  {
+    topic: 'Támogatás a felettestől',
+    campaignDay: 12,
+    question:
+      'Milyen gyakran kapsz segítséget és támogatást közvetlen felettesedtől?',
+    answerOptions: FREQ_NO_MANAGER,
+  },
+  {
+    topic: 'Támogatás a munkatársaktól',
+    campaignDay: 13,
+    question: 'Milyen gyakran kapsz segítséget és támogatást munkatársaidtól?',
+    answerOptions: FREQ_NO_COWORKERS,
+  },
+  {
+    topic: 'Támogatás a munkatársaktól',
+    campaignDay: 13,
+    question:
+      'Milyen gyakran hajlandók a munkatársaid meghallgatni a munkával kapcsolatos problémáidat?',
+    answerOptions: FREQ_NO_COWORKERS,
+  },
+  {
+    topic: 'Munkahelyi közösség',
+    campaignDay: 14,
+    question: 'Jó-e a légkör közted és a munkatársaid között?',
+    answerOptions: FREQ_NO_COWORKERS,
+  },
+  {
+    topic: 'Munkahelyi közösség',
+    campaignDay: 14,
+    question: 'A munkahelyi közösség részének érzed-e magad?',
+    answerOptions: FREQ_NO_COWORKERS,
+  },
+  {
+    topic: 'Munkahelyi elkötelezettség',
+    campaignDay: 15,
+    question: 'Örömmel mesélsz-e másoknak a munkahelyedről?',
+    answerOptions: EXTENT,
+  },
+  {
+    topic: 'Munkahelyi elkötelezettség',
+    campaignDay: 15,
+    question:
+      'Ajánlanád-e egy jó barátodnak, hogy a Te munkahelyeden vállaljon állást?',
+    answerOptions: EXTENT,
+  },
+  {
+    topic: 'Munkahelyi elégedettség',
+    campaignDay: 16,
+    question:
+      'Általánosságban, mennyire vagy elégedett a munkádban rejlő kilátásokkal?',
+    answerOptions: SATISFACTION,
+  },
+  {
+    topic: 'Munkahelyi elégedettség',
+    campaignDay: 16,
+    question:
+      'Általánosságban, mennyire vagy elégedett a munkáddal egészében véve, mindent beleszámítva?',
+    answerOptions: SATISFACTION,
+  },
+  {
+    topic: 'Munka-magánélet konfliktus',
+    campaignDay: 17,
+    question:
+      'Úgy érzed-e, hogy a munkád olyan sok energiát vesz el, hogy az negatív hatással van a magánéletedre?',
+    answerOptions: EXTENT,
+  },
+  {
+    topic: 'Munka-magánélet konfliktus',
+    campaignDay: 17,
+    question:
+      'Úgy érzed-e, hogy a munkád olyan sok időt vesz el, hogy az negatív hatással van a magánéletedre?',
+    answerOptions: EXTENT,
+  },
+  {
+    topic: 'Vezetés iránti bizalom',
+    campaignDay: 18,
+    question:
+      'A vezetőség bízik-e abban, hogy az alkalmazottak jól végzik a munkájukat?',
+    answerOptions: EXTENT,
+  },
+  {
+    topic: 'Vezetés iránti bizalom',
+    campaignDay: 18,
+    question:
+      'Megbízhatsz-e az információkban, amelyek a vezetőségtől származnak?',
+    answerOptions: EXTENT,
+  },
+  {
+    topic: 'Vezetés iránti bizalom',
+    campaignDay: 18,
+    question: 'Kifejezhetik-e az alkalmazottak véleményüket, érzéseiket?',
+    answerOptions: EXTENT,
+  },
+  {
+    topic: 'Munkatársak közötti kölcsönös bizalom',
+    campaignDay: 19,
+    question: 'Általában megbíznak-e egymásban az alkalmazottak?',
+    answerOptions: EXTENT,
+  },
+  {
+    topic: 'Szervezeti igazságosság',
+    campaignDay: 20,
+    question: 'A konfliktusokat igazságosan oldják-e meg?',
+    answerOptions: EXTENT,
+  },
+  {
+    topic: 'Szervezeti igazságosság',
+    campaignDay: 20,
+    question: 'Igazságosan van-e a munka elosztva?',
+    answerOptions: EXTENT,
+  },
+  {
+    topic: 'Kiégés',
+    campaignDay: 21,
+    question: 'Milyen gyakran érezted magadat fizikailag kimerültnek?',
+    answerOptions: TIME_PART,
+  },
+  {
+    topic: 'Kiégés',
+    campaignDay: 21,
+    question: 'Milyen gyakran érezted magadat érzelmileg kimerültnek?',
+    answerOptions: TIME_PART,
+  },
+  {
+    topic: 'Stressz',
+    campaignDay: 22,
+    question: 'Milyen gyakran érezted magadat stresszesnek?',
+    answerOptions: TIME_PART,
+  },
+  {
+    topic: 'Önbecsült egészség',
+    campaignDay: 23,
+    question: 'Összességében hogyan jellemeznéd az egészségi állapotodat?',
+    answerOptions: HEALTH,
+  },
+  {
+    topic: 'Kiszámíthatatlanság, Váratlan helyzetek',
+    campaignDay: 24,
+    question:
+      'Milyen gyakran kell váratlan feladatokat vagy váratlan helyzeteket megoldanod a munkád során?',
+    answerOptions: FREQ,
+  },
+  {
+    topic: 'Bullying',
+    campaignDay: 25,
+    question:
+      'Ki voltál-e téve a munkahelyeden nem kívánatos szexuális érdeklődésnek az elmúlt 12 hónapban?',
+    answerOptions: YES_FREQUENCY,
+  },
+  {
+    topic: 'Bullying',
+    campaignDay: 25,
+    question:
+      'Ki voltál-e téve a munkahelyeden erőszakkal való fenyegetésnek az elmúlt 12 hónapban?',
+    answerOptions: YES_FREQUENCY,
+  },
+  {
+    topic: 'Bullying',
+    campaignDay: 25,
+    question:
+      'Ki voltál-e téve a munkahelyeden fizikai bántalmazásnak az elmúlt 12 hónapban?',
+    answerOptions: YES_FREQUENCY,
+  },
+  {
+    topic: 'Bullying',
+    campaignDay: 25,
+    question:
+      '„Szekálás” alatt azt értjük, ha valakit rendszeresen kényelmetlen vagy megalázó helyzetbe kényszerítenek és az illető úgy érzi, nehéz vagy lehetetlen ettől megvédenie magát. Ki voltál-e téve a munkahelyeden „szekálásnak” az elmúlt 12 hónapban?',
+    answerOptions: YES_FREQUENCY,
+  },
+  {
+    topic: 'Testi tünetek',
+    campaignDay: 26,
+    question:
+      'Tapasztalsz-e olyan fizikai (testi, egészségi) tüneteket, amelyek a munkahelyi stresszhez kapcsolódnak? (Pl. fejfájás, hátfájás, gyomorproblémák, alvásproblémák, hangulati problémák stb.)',
+    answerOptions: YES_FREQUENCY,
   },
 ];
 
-const REPORT_DEMO_OPTIONS = ['1', '2', '3', '4', '5'];
-
 async function main() {
-  const tenantSlug = 'demo';
-  const demoEmail = 'demo@demo.hu';
-  const demoPasswordPlain = 'pass1234';
   const platformAdminEmail = 'superadmin@fempy.hu';
   const platformAdminPasswordPlain = 'superpass123';
+
+  await resetApplicationData();
 
   await prisma.platformAdmin.upsert({
     where: { email: platformAdminEmail },
@@ -128,844 +431,110 @@ async function main() {
     },
   });
 
-  console.log('Platform admin:', {
-    email: platformAdminEmail,
-    password: platformAdminPasswordPlain,
-  });
+  await seedPsychosocialCampaign();
 
-  // 1) DEMO TENANT: upsert (ha már létezik, nem duplikáljuk)
-  const tenant = await prisma.tenant.upsert({
-    where: { slug: tenantSlug },
-    update: {
-      name: 'Demo Szervezet',
+  console.log('Seed kész:', {
+    platformAdmin: {
+      email: platformAdminEmail,
+      password: platformAdminPasswordPlain,
     },
-    create: {
-      name: 'Demo Szervezet',
-      slug: tenantSlug,
-
-      // ha a Tenant-nek van kapcsolt settings 1:1
-      settings: {
-        create: {
-          orgName: 'Demo Szervezet',
-          companyForm: 'Kft',
-          defaultLang: 'hu',
-          themeMode: 'light',
-          timeZone: 'Europe/Budapest',
-          notifyPush: true,
-        },
-      },
-    },
-    include: { settings: true },
-  });
-
-    // 2) DEMO POZÍCIÓ (root jellegű)
-  // Megjegyzés:
-  // Prisma-nál a nullable mezőket tartalmazó összetett unique input néha nem engedi TS-ben a null-t,
-  // ezért itt findFirst + create mintát használunk az upsert helyett.
-  let rootPosition = await prisma.position.findFirst({
-    where: {
-      tenantId: tenant.id,
-      name: 'Root',
-      parentId: null,
+    campaign: {
+      key: CAMPAIGN_KEY,
+      name: CAMPAIGN_NAME,
+      questions: PSYCHOSOCIAL_QUESTIONS.length,
+      days: Math.max(...PSYCHOSOCIAL_QUESTIONS.map((item) => item.campaignDay)),
     },
   });
+}
 
-  if (!rootPosition) {
-    rootPosition = await prisma.position.create({
-      data: {
-        tenantId: tenant.id,
-        name: 'Root',
-        parentId: null,
-      },
-    });
-  }
+async function resetApplicationData() {
+  await prisma.notificationJob.deleteMany({});
+  await prisma.activityEvent.deleteMany({});
+  await prisma.supportSession.deleteMany({});
+  await prisma.appUsageSession.deleteMany({});
+  await prisma.userDevice.deleteMany({});
+  await prisma.userGoal.deleteMany({});
+  await prisma.dailyMood.deleteMany({});
+  await prisma.dailyQuestionnaireAnswer.deleteMany({});
+  await prisma.dailyQuestionDispatch.deleteMany({});
+  await prisma.dailyQuestionCampaignRun.deleteMany({});
+  await prisma.dailyQuestionSchedule.deleteMany({});
+  await prisma.dailyQuestion.deleteMany({});
+  await prisma.dailyQuestionTopic.deleteMany({});
+  await prisma.contentItem.deleteMany({});
+  await prisma.contentTopic.deleteMany({});
+  await prisma.contentSurface.deleteMany({});
+  await prisma.userProfile.deleteMany({});
+  await prisma.user.deleteMany({});
+  await prisma.position.deleteMany({});
+  await prisma.organizationSettings.deleteMany({});
+  await prisma.tenant.deleteMany({});
+  await prisma.platformAdmin.deleteMany({});
+}
 
-  // 3) DEMO USER: jelszó hash-elése
-  const passwordHash = await bcrypt.hash(demoPasswordPlain, 10);
+async function seedPsychosocialCampaign() {
+  const topicByName = new Map<string, { id: string; name: string }>();
 
-  // 4) DEMO USER: upsert email alapján
-  //    FONTOS:
-  //    - ha az email nálad globálisan unique (javasolt), akkor where: { email: demoEmail }
-  //    - ha még tenant+email unique, akkor findFirst + create/update (lent kommentben)
-  const user = await prisma.user.upsert({
-  where: { email: demoEmail },
-  update: {
-    tenantId: tenant.id,
-    firstName: 'Demo',
-    lastName: 'Admin',
-    role: UserRole.ADMIN,
-    isLeader: true,
-    positionId: rootPosition.id,
-    passwordHash,
-    isDeleted: false,
-  },
-  create: {
-    tenantId: tenant.id,
-    email: demoEmail,
-    passwordHash,
-    firstName: 'Demo',
-    lastName: 'Admin',
-    role: UserRole.ADMIN,
-    isLeader: true,
-    positionId: rootPosition.id,
-  },
-});
+  for (const item of PSYCHOSOCIAL_QUESTIONS) {
+    let topic = topicByName.get(item.topic);
 
-  // 5) DEMO PROFIL (opcionális, de hasznos /me-hez)
-  await prisma.userProfile.upsert({
-    where: { userId: user.id },
-    update: {
-      tenantId: tenant.id,
-      nickname: 'Demo',
-      isAnonymous: false,
-      isPublic: true,
-      dailyNotification: true,
-    },
-    create: {
-      userId: user.id,
-      tenantId: tenant.id,
-      nickname: 'Demo',
-      isAnonymous: false,
-      isPublic: true,
-      dailyNotification: true,
-      profilePic: '1',
-    },
-  });
-
- console.log('✅ Tenant, User seed kész!');
-console.log('Tenant:', {
-  id: tenant.id,
-  slug: tenant.slug,
-  name: tenant.name,
-});
-
-console.log('User:', {
-  id: user.id,
-  email: user.email,
-  password: demoPasswordPlain,
-  role: user.role,
-  isLeader: user.isLeader,
-});
- for (const item of questions) {
-    const existing = await prisma.dailyQuestion.findFirst({
-      where: {
-        tenantId: null,
-        isGlobal: true,
-        question: item.question,
-      },
-    });
-
-    if (existing) {
-      await prisma.dailyQuestion.update({
-        where: { id: existing.id },
+    if (!topic) {
+      topic = await prisma.dailyQuestionTopic.create({
         data: {
-          topic: item.topic,
-          answerOptions: item.answerOptions,
-          type: item.type,
-          isActive: true,
+          tenantId: null,
+          name: item.topic,
+          slug: slugify(item.topic),
+          description: CAMPAIGN_NAME,
           isGlobal: true,
         },
+        select: { id: true, name: true },
       });
-
-      console.log(`Updated: ${item.question}`);
-      continue;
+      topicByName.set(item.topic, topic);
     }
 
-    await prisma.dailyQuestion.create({
+    const question = await prisma.dailyQuestion.create({
       data: {
         tenantId: null,
+        topicId: topic.id,
         topic: item.topic,
         question: item.question,
         answerOptions: item.answerOptions,
-        type: item.type,
+        type: DailyQuestionType.SINGLE_CHOICE_5,
         isActive: true,
         isGlobal: true,
       },
     });
 
-    console.log(`Created: ${item.question}`);
-  }
-// ----------------------------------------------------
-// Daily Question Schedules seed
-// ----------------------------------------------------
-
-const seededQuestions = await prisma.dailyQuestion.findMany({
-  where: {
-    isGlobal: true,
-  },
-  take: 3,
-});
-
-for (const q of seededQuestions) {
-  const existingSchedule = await prisma.dailyQuestionSchedule.findFirst({
-    where: {
-      questionId: q.id,
-      scheduleType: 'MANUAL',
-    },
-  });
-
-  if (existingSchedule) {
-    console.log(`Schedule already exists for: ${q.question}`);
-    continue;
-  }
-
-  await prisma.dailyQuestionSchedule.create({
-    data: {
-      questionId: q.id,
-      scheduleType: 'MANUAL',
-      audienceType: 'ALL',
-      audienceConfig: {},
-      isActive: true,
-    },
-  });
-
-  console.log(`Schedule created for: ${q.question}`);
-}
- const demoTenant = await prisma.tenant.findUnique({
-    where: { slug: 'demo' },
-  });
-
-  if (!demoTenant) {
-    throw new Error('Demo tenant nem található.');
-  }
-
-  const demoUser = await prisma.user.findUnique({
-    where: { email: 'demo@demo.hu' },
-  });
-
-  if (!demoUser) {
-    throw new Error('Demo user nem található.');
-  }
-
-  await seedCompletedTopicReportDemo({
-    tenantId: demoTenant.id,
-    rootPositionId: rootPosition.id,
-    demoUserId: demoUser.id,
-  });
-
-  await seedRecognitionTopicCampaignDemo({
-    tenantId: demoTenant.id,
-    rootPositionId: rootPosition.id,
-    demoUserId: demoUser.id,
-  });
-
-  await seedRecognitionPendingCampaignDemo({
-    tenantId: demoTenant.id,
-    rootPositionId: rootPosition.id,
-    demoUserId: demoUser.id,
-  });
-
-}
-
-async function seedRecognitionTopicCampaignDemo(input: {
-  tenantId: string;
-  rootPositionId: string;
-  demoUserId: string;
-}) {
-  const recognitionQuestions = await prisma.dailyQuestion.findMany({
-    where: {
-      isGlobal: true,
-      isActive: true,
-      topic: RECOGNITION_DEMO_TOPIC,
-    },
-    orderBy: {
-      createdAt: 'asc',
-    },
-  });
-
-  if (recognitionQuestions.length === 0) return;
-
-  const schedulesByQuestionId = new Map<string, string>();
-
-  for (const question of recognitionQuestions) {
-    const existingSchedule = await prisma.dailyQuestionSchedule.findFirst({
-      where: {
+    await prisma.dailyQuestionSchedule.create({
+      data: {
         tenantId: null,
         questionId: question.id,
-        campaignKey: RECOGNITION_DEMO_CAMPAIGN_KEY,
-      },
-    });
-
-    const schedule = existingSchedule
-      ? await prisma.dailyQuestionSchedule.update({
-          where: { id: existingSchedule.id },
-          data: {
-            name: 'Demo elismerés kampány',
-            campaignKey: RECOGNITION_DEMO_CAMPAIGN_KEY,
-            audienceType: 'ALL',
-            audienceConfig: {},
-            isActive: true,
-          },
-        })
-      : await prisma.dailyQuestionSchedule.create({
-          data: {
-            questionId: question.id,
-            name: 'Demo elismerés kampány',
-            campaignKey: RECOGNITION_DEMO_CAMPAIGN_KEY,
-            scheduleType: 'MANUAL',
-            audienceType: 'ALL',
-            audienceConfig: {},
-            isActive: true,
-          },
-        });
-
-    schedulesByQuestionId.set(question.id, schedule.id);
-  }
-
-  const peerUsers = await seedReportDemoPeers(input.tenantId, input.rootPositionId);
-  const campaignDispatches = await prisma.dailyQuestionDispatch.findMany({
-    where: {
-      tenantId: input.tenantId,
-      campaignKey: RECOGNITION_DEMO_CAMPAIGN_KEY,
-    },
-    select: { id: true },
-  });
-
-  if (campaignDispatches.length > 0) {
-    await prisma.dailyQuestionnaireAnswer.deleteMany({
-      where: {
-        dispatchId: { in: campaignDispatches.map((dispatch) => dispatch.id) },
-      },
-    });
-
-    await prisma.dailyQuestionDispatch.deleteMany({
-      where: {
-        id: { in: campaignDispatches.map((dispatch) => dispatch.id) },
-      },
-    });
-  }
-
-  const staleRecognitionAnswers = await prisma.dailyQuestionnaireAnswer.findMany({
-    where: {
-      tenantId: input.tenantId,
-      userId: input.demoUserId,
-      questionId: { in: recognitionQuestions.map((question) => question.id) },
-      filledAt: { not: null },
-      dispatch: {
-        campaignKey: null,
-      },
-    },
-    select: {
-      dispatchId: true,
-    },
-  });
-
-  const staleDispatchIds = [...new Set(staleRecognitionAnswers.map((answer) => answer.dispatchId))];
-
-  if (staleDispatchIds.length > 0) {
-    await prisma.dailyQuestionnaireAnswer.deleteMany({
-      where: {
-        dispatchId: { in: staleDispatchIds },
-      },
-    });
-
-    await prisma.dailyQuestionDispatch.deleteMany({
-      where: {
-        id: { in: staleDispatchIds },
-      },
-    });
-  }
-
-  const baseDate = new Date();
-  baseDate.setHours(0, 0, 0, 0);
-  baseDate.setDate(baseDate.getDate() - 10);
-
-  const demoAnswers = ['nagymértékben', 'nagyon nagy mértékben'];
-  const peerAnswerSets = [
-    ['valamelyest', 'nagymértékben'],
-    ['nagyon nagy mértékben', 'valamelyest'],
-  ];
-
-  for (let i = 0; i < recognitionQuestions.length; i += 1) {
-    const question = recognitionQuestions[i];
-    const sentOn = new Date(baseDate);
-    sentOn.setDate(baseDate.getDate() + i * 5);
-
-    const dispatch = await prisma.dailyQuestionDispatch.create({
-      data: {
-        tenantId: input.tenantId,
-        questionId: question.id,
-        scheduleId: schedulesByQuestionId.get(question.id) ?? null,
-        campaignKey: RECOGNITION_DEMO_CAMPAIGN_KEY,
-        triggeredByUserId: input.demoUserId,
-        sentOn,
-        sentAt: sentOn,
-        audienceType: 'ALL',
-        audienceConfig: {},
-        pushSent: true,
-        pushTitle: 'Demo elismerés kérdés',
-        pushBody: `Demo kampány: ${question.topic}`,
-      },
-    });
-
-    await prisma.dailyQuestionnaireAnswer.create({
-      data: {
-        tenantId: input.tenantId,
-        userId: input.demoUserId,
-        questionId: question.id,
-        dispatchId: dispatch.id,
-        sentOn,
-        isActive: true,
-        answer: demoAnswers[i] ?? demoAnswers[0],
-        filledAt: new Date(sentOn.getTime() + 1000 * 60 * 60 * 6),
-      },
-    });
-
-    for (let peerIndex = 0; peerIndex < peerUsers.length; peerIndex += 1) {
-      await prisma.dailyQuestionnaireAnswer.create({
-        data: {
-          tenantId: input.tenantId,
-          userId: peerUsers[peerIndex].id,
-          questionId: question.id,
-          dispatchId: dispatch.id,
-          sentOn,
-          isActive: true,
-          answer: peerAnswerSets[peerIndex][i] ?? peerAnswerSets[peerIndex][0],
-          filledAt: new Date(sentOn.getTime() + 1000 * 60 * 60 * (8 + peerIndex)),
-        },
-      });
-    }
-  }
-
-  console.log('Demo recognition report seed kész:', {
-    topic: RECOGNITION_DEMO_TOPIC,
-    campaignKey: RECOGNITION_DEMO_CAMPAIGN_KEY,
-    questions: recognitionQuestions.length,
-  });
-}
-
-async function seedRecognitionPendingCampaignDemo(input: {
-  tenantId: string;
-  rootPositionId: string;
-  demoUserId: string;
-}) {
-  const recognitionQuestions = await prisma.dailyQuestion.findMany({
-    where: {
-      isGlobal: true,
-      isActive: true,
-      topic: RECOGNITION_DEMO_TOPIC,
-    },
-    orderBy: {
-      createdAt: 'asc',
-    },
-  });
-
-  if (recognitionQuestions.length === 0) return;
-
-  const stalePendingAnswers = await prisma.dailyQuestionnaireAnswer.findMany({
-    where: {
-      tenantId: input.tenantId,
-      userId: input.demoUserId,
-      questionId: { in: recognitionQuestions.map((question) => question.id) },
-      filledAt: null,
-      dispatch: {
-        OR: [
-          { campaignKey: null },
-          { campaignKey: RECOGNITION_PENDING_CAMPAIGN_KEY },
-        ],
-      },
-    },
-    select: { dispatchId: true },
-  });
-
-  const staleDispatchIds = [
-    ...new Set(stalePendingAnswers.map((answer) => answer.dispatchId)),
-  ];
-
-  if (staleDispatchIds.length > 0) {
-    await prisma.dailyQuestionnaireAnswer.deleteMany({
-      where: {
-        dispatchId: { in: staleDispatchIds },
-      },
-    });
-
-    await prisma.dailyQuestionDispatch.deleteMany({
-      where: {
-        id: { in: staleDispatchIds },
-      },
-    });
-  }
-
-  const peerUsers = await seedReportDemoPeers(input.tenantId, input.rootPositionId);
-  const sentOn = new Date();
-  sentOn.setHours(0, 0, 0, 0);
-
-  const peerAnswerSets = [
-    ['valamelyest', 'nagymértékben'],
-    ['nagyon nagy mértékben', 'valamelyest'],
-  ];
-
-  for (let i = 0; i < recognitionQuestions.length; i += 1) {
-    const question = recognitionQuestions[i];
-    const schedule = await upsertRecognitionSchedule(
-      question.id,
-      RECOGNITION_PENDING_CAMPAIGN_KEY,
-      'Demo pending elismerés kampány',
-    );
-
-    const dispatch = await prisma.dailyQuestionDispatch.create({
-      data: {
-        tenantId: input.tenantId,
-        questionId: question.id,
-        scheduleId: schedule.id,
-        campaignKey: RECOGNITION_PENDING_CAMPAIGN_KEY,
-        triggeredByUserId: input.demoUserId,
-        sentOn,
-        sentAt: sentOn,
-        audienceType: 'ALL',
-        audienceConfig: {},
-        pushSent: false,
-        pushTitle: 'Megérkezett a napi kérdőíved',
-        pushBody: `Töltsd ki ha szeretnél többet megtudni magadról a(z) ${question.topic} témában`,
-      },
-    });
-
-    await prisma.dailyQuestionnaireAnswer.create({
-      data: {
-        tenantId: input.tenantId,
-        userId: input.demoUserId,
-        questionId: question.id,
-        dispatchId: dispatch.id,
-        sentOn,
-        isActive: true,
-        answer: null,
-        filledAt: null,
-      },
-    });
-
-    for (let peerIndex = 0; peerIndex < peerUsers.length; peerIndex += 1) {
-      await prisma.dailyQuestionnaireAnswer.create({
-        data: {
-          tenantId: input.tenantId,
-          userId: peerUsers[peerIndex].id,
-          questionId: question.id,
-          dispatchId: dispatch.id,
-          sentOn,
-          isActive: true,
-          answer: peerAnswerSets[peerIndex][i] ?? peerAnswerSets[peerIndex][0],
-          filledAt: new Date(sentOn.getTime() + 1000 * 60 * 60 * (8 + peerIndex)),
-        },
-      });
-    }
-  }
-
-  console.log('Demo pending recognition seed kész:', {
-    topic: RECOGNITION_DEMO_TOPIC,
-    campaignKey: RECOGNITION_PENDING_CAMPAIGN_KEY,
-    questions: recognitionQuestions.length,
-  });
-}
-
-async function upsertRecognitionSchedule(
-  questionId: string,
-  campaignKey: string,
-  name: string,
-) {
-  const existingSchedule = await prisma.dailyQuestionSchedule.findFirst({
-    where: {
-      tenantId: null,
-      questionId,
-      campaignKey,
-    },
-  });
-
-  if (existingSchedule) {
-    return prisma.dailyQuestionSchedule.update({
-      where: { id: existingSchedule.id },
-      data: {
-        name,
+        name: CAMPAIGN_NAME,
+        campaignKey: CAMPAIGN_KEY,
+        campaignDay: item.campaignDay,
         scheduleType: 'MANUAL',
         audienceType: 'ALL',
         audienceConfig: {},
         isActive: true,
+        pushTitle: 'Megérkezett a napi kérdőíved',
+        pushBody: `Töltsd ki a(z) ${item.topic} témakör kérdéseit.`,
       },
     });
   }
-
-  return prisma.dailyQuestionSchedule.create({
-    data: {
-      questionId,
-      name,
-      campaignKey,
-      scheduleType: 'MANUAL',
-      audienceType: 'ALL',
-      audienceConfig: {},
-      isActive: true,
-    },
-  });
 }
 
-async function seedCompletedTopicReportDemo(input: {
-  tenantId: string;
-  rootPositionId: string;
-  demoUserId: string;
-}) {
-  const topic = await upsertReportDemoTopic(input.tenantId);
-  const reportQuestions: DailyQuestion[] = [];
-
-  for (const item of REPORT_DEMO_QUESTIONS) {
-    const existing = await prisma.dailyQuestion.findFirst({
-      where: {
-        tenantId: input.tenantId,
-        question: item.question,
-      },
-    });
-
-    if (existing) {
-      reportQuestions.push(
-        await prisma.dailyQuestion.update({
-          where: { id: existing.id },
-          data: {
-            topicId: topic.id,
-            topic: topic.name,
-            answerOptions: REPORT_DEMO_OPTIONS,
-            type: DailyQuestionType.SINGLE_CHOICE_5,
-            isActive: true,
-            isGlobal: false,
-            hungarianNorm: item.hungarianNorm,
-            hungarianStd: item.hungarianStd,
-          },
-        }),
-      );
-    } else {
-      reportQuestions.push(
-        await prisma.dailyQuestion.create({
-          data: {
-            tenantId: input.tenantId,
-            topicId: topic.id,
-            topic: topic.name,
-            question: item.question,
-            answerOptions: REPORT_DEMO_OPTIONS,
-            type: DailyQuestionType.SINGLE_CHOICE_5,
-            isActive: true,
-            isGlobal: false,
-            hungarianNorm: item.hungarianNorm,
-            hungarianStd: item.hungarianStd,
-          },
-        }),
-      );
-    }
-  }
-
-  for (const question of reportQuestions) {
-    const existingSchedule = await prisma.dailyQuestionSchedule.findFirst({
-      where: {
-        tenantId: input.tenantId,
-        questionId: question.id,
-        campaignKey: REPORT_DEMO_CAMPAIGN_KEY,
-      },
-    });
-
-    if (existingSchedule) {
-      await prisma.dailyQuestionSchedule.update({
-        where: { id: existingSchedule.id },
-        data: {
-          name: 'Demo jólét kampány',
-          campaignKey: REPORT_DEMO_CAMPAIGN_KEY,
-          scheduleType: 'MANUAL',
-          audienceType: 'ALL',
-          audienceConfig: {},
-          isActive: true,
-        },
-      });
-    } else {
-      await prisma.dailyQuestionSchedule.create({
-        data: {
-          tenantId: input.tenantId,
-          questionId: question.id,
-          name: 'Demo jólét kampány',
-          campaignKey: REPORT_DEMO_CAMPAIGN_KEY,
-          scheduleType: 'MANUAL',
-          audienceType: 'ALL',
-          audienceConfig: {},
-          isActive: true,
-        },
-      });
-    }
-  }
-
-  const peerUsers = await seedReportDemoPeers(input.tenantId, input.rootPositionId);
-  const campaignDispatches = await prisma.dailyQuestionDispatch.findMany({
-    where: {
-      tenantId: input.tenantId,
-      campaignKey: REPORT_DEMO_CAMPAIGN_KEY,
-    },
-    select: { id: true },
-  });
-
-  if (campaignDispatches.length > 0) {
-    await prisma.dailyQuestionnaireAnswer.deleteMany({
-      where: {
-        dispatchId: { in: campaignDispatches.map((dispatch) => dispatch.id) },
-      },
-    });
-
-    await prisma.dailyQuestionDispatch.deleteMany({
-      where: {
-        id: { in: campaignDispatches.map((dispatch) => dispatch.id) },
-      },
-    });
-  }
-
-  const baseDate = new Date();
-  baseDate.setHours(0, 0, 0, 0);
-  baseDate.setDate(baseDate.getDate() - 14);
-
-  const demoAnswers = ['4', '5', '3'];
-  const peerAnswerSets = [
-    ['3', '4', '3'],
-    ['5', '4', '4'],
-  ];
-
-  for (let i = 0; i < reportQuestions.length; i += 1) {
-    const question = reportQuestions[i];
-    const schedule = await prisma.dailyQuestionSchedule.findFirstOrThrow({
-      where: {
-        tenantId: input.tenantId,
-        questionId: question.id,
-        campaignKey: REPORT_DEMO_CAMPAIGN_KEY,
-      },
-    });
-
-    const sentOn = new Date(baseDate);
-    sentOn.setDate(baseDate.getDate() + i * 5);
-
-    const dispatch = await prisma.dailyQuestionDispatch.create({
-      data: {
-        tenantId: input.tenantId,
-        questionId: question.id,
-        scheduleId: schedule.id,
-        campaignKey: REPORT_DEMO_CAMPAIGN_KEY,
-        triggeredByUserId: input.demoUserId,
-        sentOn,
-        sentAt: sentOn,
-        audienceType: 'ALL',
-        audienceConfig: {},
-        pushSent: true,
-        pushTitle: 'Demo jólét kérdés',
-        pushBody: `Demo kampány: ${question.topic}`,
-      },
-    });
-
-    await prisma.dailyQuestionnaireAnswer.create({
-      data: {
-        tenantId: input.tenantId,
-        userId: input.demoUserId,
-        questionId: question.id,
-        dispatchId: dispatch.id,
-        sentOn,
-        isActive: true,
-        answer: demoAnswers[i],
-        filledAt: new Date(sentOn.getTime() + 1000 * 60 * 60 * 6),
-      },
-    });
-
-    for (let peerIndex = 0; peerIndex < peerUsers.length; peerIndex += 1) {
-      await prisma.dailyQuestionnaireAnswer.create({
-        data: {
-          tenantId: input.tenantId,
-          userId: peerUsers[peerIndex].id,
-          questionId: question.id,
-          dispatchId: dispatch.id,
-          sentOn,
-          isActive: true,
-          answer: peerAnswerSets[peerIndex][i],
-          filledAt: new Date(sentOn.getTime() + 1000 * 60 * 60 * (8 + peerIndex)),
-        },
-      });
-    }
-  }
-
-  console.log('Demo topic report seed kész:', {
-    topic: topic.name,
-    campaignKey: REPORT_DEMO_CAMPAIGN_KEY,
-    questions: reportQuestions.length,
-  });
+function slugify(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }
-
-async function upsertReportDemoTopic(tenantId: string) {
-  const existing = await prisma.dailyQuestionTopic.findFirst({
-    where: {
-      tenantId,
-      slug: REPORT_DEMO_TOPIC.slug,
-    },
-  });
-
-  if (existing) {
-    return prisma.dailyQuestionTopic.update({
-      where: { id: existing.id },
-      data: {
-        name: REPORT_DEMO_TOPIC.name,
-        description: 'Seedelt demo témakör a mobil riport felület teszteléséhez.',
-        isGlobal: false,
-      },
-    });
-  }
-
-  return prisma.dailyQuestionTopic.create({
-    data: {
-      tenantId,
-      name: REPORT_DEMO_TOPIC.name,
-      slug: REPORT_DEMO_TOPIC.slug,
-      description: 'Seedelt demo témakör a mobil riport felület teszteléséhez.',
-      isGlobal: false,
-    },
-  });
-}
-
-async function seedReportDemoPeers(tenantId: string, rootPositionId: string) {
-  const peers = [
-    {
-      email: 'report-peer1@demo.hu',
-      firstName: 'Report',
-      lastName: 'Peer 1',
-    },
-    {
-      email: 'report-peer2@demo.hu',
-      firstName: 'Report',
-      lastName: 'Peer 2',
-    },
-  ];
-
-  const passwordHash = await bcrypt.hash('pass1234', 10);
-  const users: User[] = [];
-
-  for (const peer of peers) {
-    users.push(
-      await prisma.user.upsert({
-        where: { email: peer.email },
-        update: {
-          tenantId,
-          firstName: peer.firstName,
-          lastName: peer.lastName,
-          role: UserRole.USER,
-          isLeader: false,
-          isDeleted: false,
-          positionId: rootPositionId,
-          passwordHash,
-        },
-        create: {
-          tenantId,
-          email: peer.email,
-          passwordHash,
-          firstName: peer.firstName,
-          lastName: peer.lastName,
-          role: UserRole.USER,
-          isLeader: false,
-          positionId: rootPositionId,
-        },
-      }),
-    );
-  }
-
-  return users;
-}
-
-
 
 main()
-  .catch((e) => {
-    console.error('❌ Seed hiba:', e);
+  .catch((error) => {
+    console.error('Seed hiba:', error);
     process.exit(1);
   })
   .finally(async () => {

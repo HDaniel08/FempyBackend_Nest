@@ -6,6 +6,7 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
 ////////////////////////////////////
 // ENUMS
 ////////////////////////////////////
@@ -27,6 +28,7 @@ enum DailyQuestionAudienceType {
   ACTIVITY
   CUSTOM
 }
+
 enum UserRole {
   USER
   LEADER
@@ -43,23 +45,24 @@ model Tenant {
   appAccessEnabled Boolean  @default(true) @map("app_access_enabled")
   createdAt        DateTime @default(now()) @map("created_at")
 
-  users      User[]
-  settings   OrganizationSettings?
-  positions  Position[]
-  devices    UserDevice[]
-  moods      DailyMood[]
-  activities ActivityEvent[]
-  supportSessions SupportSession[]
+  users            User[]
+  settings         OrganizationSettings?
+  positions        Position[]
+  devices          UserDevice[]
+  moods            DailyMood[]
+  activities       ActivityEvent[]
+  supportSessions  SupportSession[]
   appUsageSessions AppUsageSession[]
-  notifJobs  NotificationJob[]
-  profiles   UserProfile[]
+  notifJobs        NotificationJob[]
+  profiles         UserProfile[]
 
-  userGoals               UserGoal[]
-  dailyQuestions          DailyQuestion[]
-  dailyQuestionTopics     DailyQuestionTopic[]
-  dailyQuestionAnswers    DailyQuestionnaireAnswer[]
-  dailyQuestionSchedules  DailyQuestionSchedule[]
-  dailyQuestionDispatches DailyQuestionDispatch[]
+  userGoals                 UserGoal[]
+  dailyQuestions            DailyQuestion[]
+  dailyQuestionTopics       DailyQuestionTopic[]
+  dailyQuestionAnswers      DailyQuestionnaireAnswer[]
+  dailyQuestionSchedules    DailyQuestionSchedule[]
+  dailyQuestionDispatches   DailyQuestionDispatch[]
+  dailyQuestionCampaignRuns DailyQuestionCampaignRun[]
 
   @@map("tenants")
 }
@@ -87,8 +90,8 @@ model SupportSession {
   startedAt       DateTime  @default(now()) @map("started_at")
   endedAt         DateTime? @map("ended_at")
 
-  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  platformAdmin PlatformAdmin @relation(fields: [platformAdminId], references: [id], onDelete: Cascade)
+  tenant        Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  platformAdmin PlatformAdmin   @relation(fields: [platformAdminId], references: [id], onDelete: Cascade)
   activities    ActivityEvent[]
 
   @@index([tenantId, status, startedAt(sort: Desc)])
@@ -222,20 +225,21 @@ model User {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  profile    UserProfile?
-  devices    UserDevice[]
-  moods      DailyMood[]
-  activities ActivityEvent[]
+  profile          UserProfile?
+  devices          UserDevice[]
+  moods            DailyMood[]
+  activities       ActivityEvent[]
   appUsageSessions AppUsageSession[]
-  answers    DailyQuestionnaireAnswer[]
-  notifJobs  NotificationJob[]
-  userGoals  UserGoal[]
+  answers          DailyQuestionnaireAnswer[]
+  notifJobs        NotificationJob[]
+  userGoals        UserGoal[]
 
   @@index([tenantId])
   @@index([tenantId, positionId])
   @@index([tenantId, role])
   @@map("users")
 }
+
 model UserProfile {
   userId   String @id @map("user_id")
   tenantId String @map("tenant_id")
@@ -328,19 +332,19 @@ model DailyQuestion {
   tenantId String? @map("tenant_id")
   tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  topicId String?             @map("topic_id")
+  topicId  String?             @map("topic_id")
   topicRef DailyQuestionTopic? @relation(fields: [topicId], references: [id], onDelete: SetNull)
 
   topic         String
   question      String
-  answerOptions Json     @map("answer_options")
+  answerOptions Json              @map("answer_options")
   type          DailyQuestionType
-  isActive      Boolean  @default(true) @map("is_active")
-  isGlobal      Boolean  @default(false) @map("is_global")
-  hungarianNorm Decimal? @map("hungarian_norm") @db.Decimal(5, 2)
-  hungarianStd  Decimal? @map("hungarian_std") @db.Decimal(5, 2)
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  isActive      Boolean           @default(true) @map("is_active")
+  isGlobal      Boolean           @default(false) @map("is_global")
+  hungarianNorm Decimal?          @map("hungarian_norm") @db.Decimal(5, 2)
+  hungarianStd  Decimal?          @map("hungarian_std") @db.Decimal(5, 2)
+  createdAt     DateTime          @default(now()) @map("created_at")
+  updatedAt     DateTime          @updatedAt @map("updated_at")
 
   answers   DailyQuestionnaireAnswer[]
   schedules DailyQuestionSchedule[]
@@ -366,13 +370,14 @@ model DailyQuestionSchedule {
   campaignKey             String? @map("campaign_key")
   isActive                Boolean @default(true) @map("is_active")
   isDefaultWeekdayMorning Boolean @default(false) @map("is_default_weekday_morning")
+  campaignDay             Int     @default(1) @map("campaign_day")
 
-  scheduleType DailyQuestionScheduleType    @map("schedule_type")
-  cronExpr     String?   @map("cron_expr")
-  runAt        DateTime? @map("run_at")
+  scheduleType DailyQuestionScheduleType @map("schedule_type")
+  cronExpr     String?                   @map("cron_expr")
+  runAt        DateTime?                 @map("run_at")
 
-  audienceType   DailyQuestionAudienceType  @map("audience_type")
-  audienceConfig Json?  @map("audience_config")
+  audienceType   DailyQuestionAudienceType @map("audience_type")
+  audienceConfig Json?                     @map("audience_config")
 
   pushTitle String? @map("push_title")
   pushBody  String? @map("push_body")
@@ -403,6 +408,7 @@ model DailyQuestionDispatch {
   schedule   DailyQuestionSchedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
 
   campaignKey String? @map("campaign_key")
+  campaignDay Int?    @map("campaign_day")
 
   triggeredByUserId String?  @map("triggered_by_user_id")
   sentOn            DateTime @map("sent_on") @db.Date
@@ -424,6 +430,27 @@ model DailyQuestionDispatch {
   @@index([questionId])
   @@index([scheduleId])
   @@map("daily_question_dispatches")
+}
+
+model DailyQuestionCampaignRun {
+  id       String @id @default(uuid())
+  tenantId String @map("tenant_id")
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  campaignKey String    @map("campaign_key")
+  status      String    @default("active")
+  startedAt   DateTime  @default(now()) @map("started_at")
+  endedAt     DateTime? @map("ended_at")
+
+  lastProcessedDay Int?      @map("last_processed_day")
+  lastProcessedAt  DateTime? @map("last_processed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId, status])
+  @@index([campaignKey, status])
+  @@map("daily_question_campaign_runs")
 }
 
 model DailyQuestionnaireAnswer {
@@ -452,22 +479,22 @@ model DailyQuestionnaireAnswer {
 }
 
 model ActivityEvent {
-  id        String   @id @default(uuid())
-  tenantId  String   @map("tenant_id")
-  userId    String?  @map("user_id")
-  event     String
-  category  String   @default("APP")
-  source    String   @default("api")
-  entityType String? @map("entity_type")
-  entityId   String? @map("entity_id")
-  supportSessionId String? @map("support_session_id")
-  metadata   Json?
-  ipAddress  String? @map("ip_address")
-  userAgent  String? @map("user_agent")
-  createdAt DateTime @default(now()) @map("created_at")
+  id               String   @id @default(uuid())
+  tenantId         String   @map("tenant_id")
+  userId           String?  @map("user_id")
+  event            String
+  category         String   @default("APP")
+  source           String   @default("api")
+  entityType       String?  @map("entity_type")
+  entityId         String?  @map("entity_id")
+  supportSessionId String?  @map("support_session_id")
+  metadata         Json?
+  ipAddress        String?  @map("ip_address")
+  userAgent        String?  @map("user_agent")
+  createdAt        DateTime @default(now()) @map("created_at")
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user           User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
   supportSession SupportSession? @relation(fields: [supportSessionId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, createdAt(sort: Desc)])

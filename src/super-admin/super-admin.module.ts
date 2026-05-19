@@ -6,6 +6,8 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { ActivityModule } from '../activity/activity.module';
 import { ContentModule } from '../content/content.module';
 import { UsageModule } from '../usage/usage.module';
+import { MailModule } from '../mail/mail.module';
+import { DailyQuestionsModule } from '../daily-questions/daily-questions.module';
 import { SuperAdminController } from './super-admin.controller';
 import { SuperAdminGuard } from './super-admin.guard';
 import { SuperAdminService } from './super-admin.service';
@@ -17,6 +19,8 @@ import { SuperAdminService } from './super-admin.service';
     ActivityModule,
     ContentModule,
     UsageModule,
+    MailModule,
+    DailyQuestionsModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({

@@ -1,20 +1,22 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
-import { PrismaService } from '../../prisma/prisma.service';
+import { Cron } from '@nestjs/schedule';
+import { DailyQuestionCampaignsService } from './daily-question-campaigns.service';
 
 @Injectable()
 export class DailyQuestionSchedulerService {
   private readonly logger = new Logger(DailyQuestionSchedulerService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly campaignsService: DailyQuestionCampaignsService,
+  ) {}
 
-  @Cron(CronExpression.EVERY_MINUTE)
-  async handleSchedules() {
-    // Később ide jön:
-    // - ONE_TIME schedule-k futtatása
-    // - CRON schedule-k ellenőrzése
-    // - default weekday morning küldések kezelése
-
-    this.logger.debug('Daily question scheduler tick');
+  @Cron('0 9 * * *', { timeZone: 'Europe/Budapest' })
+  async handleDailyCampaigns() {
+    const results = await this.campaignsService.processDueCampaigns();
+    if (results.length > 0) {
+      this.logger.log(
+        `Napi kérdőív kampány feldolgozás: ${results.length} futás`,
+      );
+    }
   }
 }

@@ -11,9 +11,10 @@ import { AdminSettingsService } from './admin-settings.service';
 import { AdminDashboardService } from './admin-dashboard.service';
 import { AdminDashboardController } from './admin-dashboard.controller';
 import { ActivityModule } from '../activity/activity.module';
+import { MailModule } from '../mail/mail.module';
 
 @Module({
-  imports: [ActivityModule],
+  imports: [ActivityModule, MailModule],
   controllers: [
     AdminUsersController,
     AdminPositionsController,

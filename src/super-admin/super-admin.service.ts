@@ -1,13 +1,23 @@
-import { BadRequestException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { UserRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { existsSync } from 'fs';
+import { join } from 'path';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ActivityLogService } from '../activity/activity-log.service';
 import { ActivityMaintenanceService } from '../activity/activity-maintenance.service';
 import { ContentService } from '../content/content.service';
 import { UsageService } from '../usage/usage.service';
+import { MailService } from '../mail/mail.service';
 
 type PushFilters = {
   tenantId?: string;
@@ -22,14 +32,18 @@ type PushFilters = {
 
 @Injectable()
 export class SuperAdminService {
+  private readonly logger = new Logger(SuperAdminService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
+    private readonly config: ConfigService,
     private readonly notifications: NotificationsService,
     private readonly activity: ActivityLogService,
     private readonly activityMaintenance: ActivityMaintenanceService,
     private readonly content: ContentService,
     private readonly usage: UsageService,
+    private readonly mail: MailService,
   ) {}
 
   async login(input: { email: string; password: string }) {
@@ -75,7 +89,9 @@ export class SuperAdminService {
           select: { id: true, name: true },
           orderBy: { name: 'asc' },
         },
-        _count: { select: { users: true, devices: true, dailyQuestionDispatches: true } },
+        _count: {
+          select: { users: true, devices: true, dailyQuestionDispatches: true },
+        },
       },
     });
 
@@ -167,7 +183,10 @@ export class SuperAdminService {
         where: { event: 'SUPER_ADMIN_TENANT_IMPERSONATION_STARTED' },
         orderBy: { createdAt: 'desc' },
         take: 8,
-        include: { tenant: { select: { name: true, slug: true } }, user: { select: { email: true } } },
+        include: {
+          tenant: { select: { name: true, slug: true } },
+          user: { select: { email: true } },
+        },
       }),
       this.prisma.notificationJob.findMany({
         where: { status: { in: ['failed', 'error'] } },
@@ -198,7 +217,8 @@ export class SuperAdminService {
   async listPlatformAudit(query: any) {
     const where: any = {};
     if (query?.tenantId) where.tenantId = String(query.tenantId);
-    if (query?.event) where.event = { contains: String(query.event), mode: 'insensitive' };
+    if (query?.event)
+      where.event = { contains: String(query.event), mode: 'insensitive' };
     if (query?.category) where.category = String(query.category);
     const limit = Math.min(Number(query?.limit ?? 100), 300);
 
@@ -208,18 +228,30 @@ export class SuperAdminService {
       take: limit,
       include: {
         tenant: { select: { id: true, name: true, slug: true } },
-        user: { select: { id: true, email: true, firstName: true, lastName: true, role: true } },
+        user: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            role: true,
+          },
+        },
       },
     });
   }
 
-  async createTenant(input: {
-    tenantName: string;
-    slug: string;
-    adminEmail: string;
-    adminName: string;
-    adminPassword: string;
-  }, actor?: any, req?: any) {
+  async createTenant(
+    input: {
+      tenantName: string;
+      slug: string;
+      adminEmail: string;
+      adminName: string;
+      adminPassword: string;
+    },
+    actor?: any,
+    req?: any,
+  ) {
     const name = input.tenantName?.trim();
     const slug = input.slug?.trim().toLowerCase();
     const email = input.adminEmail?.trim().toLowerCase();
@@ -300,10 +332,77 @@ export class SuperAdminService {
       request: this.activity.requestMeta(req),
     });
 
+    await this.sendTenantWelcomeEmail({
+      adminName,
+      email,
+      password: input.adminPassword,
+      tenantName: result.tenant.name,
+    });
+
     return result;
   }
 
-  async updateTenantAccess(tenantId: string, enabled: boolean, actor?: any, req?: any) {
+  async sendTestEmail(
+    input: { email: string; name?: string },
+    actor?: any,
+    req?: any,
+  ) {
+    const email = input.email?.trim().toLowerCase();
+    const name = input.name?.trim() || 'Teszt felhasználó';
+
+    if (!email) {
+      throw new BadRequestException('Email cím megadása kötelező.');
+    }
+
+    const appDownloadUrl =
+      this.config.get<string>('APP_DOWNLOAD_URL') ?? 'https://fempyapp.com';
+    const adminWebUrl =
+      this.config.get<string>('ADMIN_WEB_URL') ??
+      this.config.get<string>('PUBLIC_BASE_URL') ??
+      'https://fempyapp.com';
+    const logoPath = this.resolveMailLogoPath();
+
+    await this.mail.sendMail({
+      to: { email, name },
+      subject: 'Fempy - Teszt email',
+      html: this.buildTestEmailHtml({
+        name,
+        appDownloadUrl,
+        adminWebUrl,
+        hasLogo: !!logoPath,
+      }),
+      text: `Kedves ${name}!
+
+Ez egy Fempy teszt email. Ha ezt az üzenetet megkaptad, az SMTP email szolgáltatás működik.
+
+Alkalmazás: ${appDownloadUrl}
+Webes felület: ${adminWebUrl}
+
+Fempy csapata`,
+      attachments: logoPath
+        ? [
+            {
+              filename: 'fempy-logo.png',
+              path: logoPath,
+              cid: 'fempy-logo',
+            },
+          ]
+        : undefined,
+    });
+
+    this.logger.log(
+      `Superadmin test email sent to ${email} by ${actor?.email ?? actor?.sub ?? 'unknown'}`,
+    );
+
+    return { ok: true };
+  }
+
+  async updateTenantAccess(
+    tenantId: string,
+    enabled: boolean,
+    actor?: any,
+    req?: any,
+  ) {
     const tenant = await this.prisma.tenant.update({
       where: { id: tenantId },
       data: { appAccessEnabled: enabled },
@@ -311,12 +410,18 @@ export class SuperAdminService {
 
     await this.activity.log({
       tenantId,
-      event: enabled ? 'SUPER_ADMIN_TENANT_APP_ENABLED' : 'SUPER_ADMIN_TENANT_APP_DISABLED',
+      event: enabled
+        ? 'SUPER_ADMIN_TENANT_APP_ENABLED'
+        : 'SUPER_ADMIN_TENANT_APP_DISABLED',
       source: 'super-admin',
       entityType: 'TENANT',
       entityId: tenantId,
       actor: { type: 'PLATFORM_ADMIN', id: actor?.sub ?? null },
-      supportSessionId: await this.resolveSupportSessionId(tenantId, actor?.sub, req),
+      supportSessionId: await this.resolveSupportSessionId(
+        tenantId,
+        actor?.sub,
+        req,
+      ),
       metadata: { enabled, tenantName: tenant.name, slug: tenant.slug },
       request: this.activity.requestMeta(req),
     });
@@ -363,7 +468,9 @@ export class SuperAdminService {
       },
     });
     if (!adminUser) {
-      throw new BadRequestException('A tenantban nincs aktiv admin felhasznalo.');
+      throw new BadRequestException(
+        'A tenantban nincs aktiv admin felhasznalo.',
+      );
     }
 
     const accessToken = await this.jwt.signAsync({
@@ -495,8 +602,12 @@ export class SuperAdminService {
     ] = await Promise.all([
       this.prisma.user.count({ where: { tenantId, isDeleted: false } }),
       this.prisma.user.count({ where: { tenantId, isDeleted: true } }),
-      this.prisma.user.count({ where: { tenantId, role: UserRole.ADMIN, isDeleted: false } }),
-      this.prisma.user.count({ where: { tenantId, isLeader: true, isDeleted: false } }),
+      this.prisma.user.count({
+        where: { tenantId, role: UserRole.ADMIN, isDeleted: false },
+      }),
+      this.prisma.user.count({
+        where: { tenantId, isLeader: true, isDeleted: false },
+      }),
       this.prisma.user.findMany({
         where: { tenantId },
         orderBy: [{ isDeleted: 'asc' }, { updatedAt: 'desc' }],
@@ -522,7 +633,14 @@ export class SuperAdminService {
               dailyNotification: true,
             },
           },
-          _count: { select: { devices: true, moods: true, answers: true, notifJobs: true } },
+          _count: {
+            select: {
+              devices: true,
+              moods: true,
+              answers: true,
+              notifJobs: true,
+            },
+          },
         },
       }),
       this.prisma.position.findMany({
@@ -554,7 +672,9 @@ export class SuperAdminService {
           mood: true,
           comment: true,
           updatedAt: true,
-          user: { select: { id: true, firstName: true, lastName: true, email: true } },
+          user: {
+            select: { id: true, firstName: true, lastName: true, email: true },
+          },
         },
       }),
       this.prisma.dailyQuestionDispatch.findMany({
@@ -584,7 +704,9 @@ export class SuperAdminService {
           scheduledFor: true,
           createdAt: true,
           processedAt: true,
-          user: { select: { id: true, firstName: true, lastName: true, email: true } },
+          user: {
+            select: { id: true, firstName: true, lastName: true, email: true },
+          },
         },
       }),
       this.prisma.dailyQuestionSchedule.groupBy({
@@ -672,7 +794,9 @@ export class SuperAdminService {
     actor?: any,
     req?: any,
   ) {
-    const user = await this.prisma.user.findFirst({ where: { id: userId, tenantId } });
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, tenantId },
+    });
     if (!user) throw new NotFoundException('User nem talÃ¡lhatÃ³.');
 
     const data: any = {};
@@ -707,7 +831,8 @@ export class SuperAdminService {
           where: { id: input.positionId, tenantId, isDeleted: false },
           select: { id: true },
         });
-        if (!position) throw new BadRequestException('Ã‰rvÃ©nytelen pozÃ­ciÃ³.');
+        if (!position)
+          throw new BadRequestException('Ã‰rvÃ©nytelen pozÃ­ciÃ³.');
       }
       data.positionId = input.positionId ?? null;
     }
@@ -741,7 +866,11 @@ export class SuperAdminService {
       entityType: 'USER',
       entityId: userId,
       actor: { type: 'PLATFORM_ADMIN', id: actor?.sub ?? null },
-      supportSessionId: await this.resolveSupportSessionId(tenantId, actor?.sub, req),
+      supportSessionId: await this.resolveSupportSessionId(
+        tenantId,
+        actor?.sub,
+        req,
+      ),
       metadata: {
         changed: Object.keys(data),
         before: {
@@ -778,7 +907,8 @@ export class SuperAdminService {
     if (query?.userId) where.userId = String(query.userId);
     if (query?.entityType) where.entityType = String(query.entityType);
     if (query?.entityId) where.entityId = String(query.entityId);
-    if (query?.supportSessionId) where.supportSessionId = String(query.supportSessionId);
+    if (query?.supportSessionId)
+      where.supportSessionId = String(query.supportSessionId);
     if (query?.from || query?.to) {
       where.createdAt = {};
       if (query.from) where.createdAt.gte = new Date(query.from);
@@ -885,7 +1015,12 @@ export class SuperAdminService {
     return session;
   }
 
-  async closeSupportSession(tenantId: string, sessionId: string, actor: any, req?: any) {
+  async closeSupportSession(
+    tenantId: string,
+    sessionId: string,
+    actor: any,
+    req?: any,
+  ) {
     const session = await this.prisma.supportSession.findFirst({
       where: { id: sessionId, tenantId, platformAdminId: actor.sub },
     });
@@ -973,7 +1108,10 @@ export class SuperAdminService {
         category: row.category,
         count: row._count.id,
       })),
-      topEvents: byEvent.map((row) => ({ event: row.event, count: row._count.id })),
+      topEvents: byEvent.map((row) => ({
+        event: row.event,
+        count: row._count.id,
+      })),
       timeline,
     };
   }
@@ -1022,14 +1160,24 @@ export class SuperAdminService {
     return [
       {
         id: 'failed-logins',
-        severity: failedLogins >= 10 ? 'critical' : failedLogins >= 5 ? 'warning' : 'ok',
+        severity:
+          failedLogins >= 10
+            ? 'critical'
+            : failedLogins >= 5
+              ? 'warning'
+              : 'ok',
         title: 'Sikertelen loginok',
         value: failedLogins,
         detail: 'Az utolso 1 oraban.',
       },
       {
         id: 'notification-errors',
-        severity: notificationErrors >= 5 ? 'critical' : notificationErrors > 0 ? 'warning' : 'ok',
+        severity:
+          notificationErrors >= 5
+            ? 'critical'
+            : notificationErrors > 0
+              ? 'warning'
+              : 'ok',
         title: 'Notification hibak',
         value: notificationErrors,
         detail: 'Failed notification jobok az utolso 1 oraban.',
@@ -1051,7 +1199,11 @@ export class SuperAdminService {
     ];
   }
 
-  cleanupActivityRetention(input: { appDays?: number; auditDays?: number; systemDays?: number }) {
+  cleanupActivityRetention(input: {
+    appDays?: number;
+    auditDays?: number;
+    systemDays?: number;
+  }) {
     return this.activityMaintenance.cleanup(input);
   }
 
@@ -1107,7 +1259,8 @@ export class SuperAdminService {
           tenantName: schedule.tenant?.name ?? 'Globális',
           campaignKey: schedule.campaignKey,
           name: schedule.name ?? schedule.campaignKey,
-          topicName: schedule.question.topicRef?.name ?? schedule.question.topic,
+          topicName:
+            schedule.question.topicRef?.name ?? schedule.question.topic,
           questionCount: 0,
           activeSchedules: 0,
         });
@@ -1173,11 +1326,16 @@ export class SuperAdminService {
         entityType: 'PUSH',
         entityId: null,
         actor: { type: 'PLATFORM_ADMIN', id: actor?.sub ?? null },
-        supportSessionId: await this.resolveSupportSessionId(tenantId, actor?.sub, req),
+        supportSessionId: await this.resolveSupportSessionId(
+          tenantId,
+          actor?.sub,
+          req,
+        ),
         metadata: {
           title: input.title,
           filters: input.filters ?? {},
-          targetedUsers: users.filter((user) => user.tenantId === tenantId).length,
+          targetedUsers: users.filter((user) => user.tenantId === tenantId)
+            .length,
         },
         request: this.activity.requestMeta(req),
       });
@@ -1191,7 +1349,8 @@ export class SuperAdminService {
     if (filters.tenantId) where.tenantId = filters.tenantId;
     if (filters.positionId) where.positionId = filters.positionId;
     if (filters.role) where.role = filters.role;
-    if (typeof filters.isLeader === 'boolean') where.isLeader = filters.isLeader;
+    if (typeof filters.isLeader === 'boolean')
+      where.isLeader = filters.isLeader;
     if (typeof filters.appAccessEnabled === 'boolean') {
       where.tenant = { appAccessEnabled: filters.appAccessEnabled };
     }
@@ -1217,7 +1376,11 @@ export class SuperAdminService {
     });
   }
 
-  private async resolveSupportSessionId(tenantId: string, adminId?: string, req?: any) {
+  private async resolveSupportSessionId(
+    tenantId: string,
+    adminId?: string,
+    req?: any,
+  ) {
     const sessionId = req?.headers?.['x-support-session-id'];
     if (!sessionId || !adminId) return null;
 
@@ -1261,7 +1424,10 @@ export class SuperAdminService {
     return date;
   }
 
-  private reduceDailyTimeline(rows: Array<{ createdAt: Date; category: string }>, days: number) {
+  private reduceDailyTimeline(
+    rows: Array<{ createdAt: Date; category: string }>,
+    days: number,
+  ) {
     const map = new Map<string, any>();
     for (let i = days - 1; i >= 0; i -= 1) {
       const date = this.daysAgo(i).toISOString().slice(0, 10);
@@ -1279,7 +1445,10 @@ export class SuperAdminService {
     return [...map.values()];
   }
 
-  private async assertTenantKeepsAdmin(tenantId: string, excludedUserId: string) {
+  private async assertTenantKeepsAdmin(
+    tenantId: string,
+    excludedUserId: string,
+  ) {
     const activeAdminCount = await this.prisma.user.count({
       where: {
         tenantId,
@@ -1290,7 +1459,279 @@ export class SuperAdminService {
     });
 
     if (activeAdminCount < 1) {
-      throw new BadRequestException('Az utolsÃ³ aktÃ­v adminisztrÃ¡tor nem mÃ³dosÃ­thatÃ³.');
+      throw new BadRequestException(
+        'Az utolsÃ³ aktÃ­v adminisztrÃ¡tor nem mÃ³dosÃ­thatÃ³.',
+      );
     }
+  }
+
+  private async sendTenantWelcomeEmail(input: {
+    adminName: string;
+    email: string;
+    password: string;
+    tenantName: string;
+  }) {
+    try {
+      const appDownloadUrl =
+        this.config.get<string>('APP_DOWNLOAD_URL') ?? 'https://fempyapp.com';
+      const adminWebUrl =
+        this.config.get<string>('ADMIN_WEB_URL') ??
+        this.config.get<string>('PUBLIC_BASE_URL') ??
+        'https://fempyapp.com';
+      const logoPath = this.resolveMailLogoPath();
+
+      await this.mail.sendMail({
+        to: { email: input.email, name: input.adminName },
+        subject: 'Fempy - Hozzaferes az ingyenes tesztidoszakhoz',
+        html: this.buildTenantWelcomeEmailHtml({
+          adminName: input.adminName,
+          email: input.email,
+          password: input.password,
+          appDownloadUrl,
+          adminWebUrl,
+          tenantName: input.tenantName,
+          hasLogo: !!logoPath,
+        }),
+        text: this.buildTenantWelcomeEmailText({
+          adminName: input.adminName,
+          email: input.email,
+          password: input.password,
+          appDownloadUrl,
+          adminWebUrl,
+        }),
+        attachments: logoPath
+          ? [
+              {
+                filename: 'fempy-logo.png',
+                path: logoPath,
+                cid: 'fempy-logo',
+              },
+            ]
+          : undefined,
+      });
+    } catch (error) {
+      this.logger.error(
+        'Tenant welcome email sending failed',
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
+  }
+
+  private buildTestEmailHtml(input: {
+    name: string;
+    appDownloadUrl: string;
+    adminWebUrl: string;
+    hasLogo: boolean;
+  }) {
+    const name = this.escapeHtml(input.name);
+    const appDownloadUrl = this.escapeHtml(input.appDownloadUrl);
+    const adminWebUrl = this.escapeHtml(input.adminWebUrl);
+
+    return `
+<!doctype html>
+<html lang="hu">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Fempy teszt email</title>
+  </head>
+  <body style="margin:0;background:#f4f7fb;color:#162033;font-family:Arial,Helvetica,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f7fb;padding:32px 16px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:620px;background:#ffffff;border:1px solid #dde5ef;border-radius:12px;overflow:hidden;">
+            <tr>
+              <td style="padding:28px 34px;background:#ffffff;border-bottom:1px solid #e8eef5;">
+                ${
+                  input.hasLogo
+                    ? '<img src="cid:fempy-logo" width="190" alt="Fempy App" style="display:block;max-width:190px;height:auto;">'
+                    : '<div style="font-size:24px;font-weight:700;color:#162033;">Fempy</div>'
+                }
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:34px 34px 10px;">
+                <div style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#7b8ba1;font-weight:700;">Email szolgáltatás teszt</div>
+                <h1 style="margin:10px 0 0;font-size:24px;line-height:1.3;color:#162033;font-weight:700;">Sikeres teszt email</h1>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:8px 34px 30px;">
+                <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#27364a;">Kedves ${name}!</p>
+                <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#27364a;">Ez egy Fempy teszt email. Ha ezt az üzenetet megkaptad, az SMTP email szolgáltatás működik.</p>
+                <table role="presentation" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td style="border-radius:8px;background:#d4145a;">
+                      <a href="${appDownloadUrl}" style="display:inline-block;padding:13px 20px;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;">Alkalmazás link</a>
+                    </td>
+                    <td width="12"></td>
+                    <td style="border-radius:8px;border:1px solid #b8c6d8;background:#ffffff;">
+                      <a href="${adminWebUrl}" style="display:inline-block;padding:12px 18px;color:#26374d;text-decoration:none;font-size:15px;font-weight:700;">Webes felület</a>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 34px;background:#eef3f8;color:#7b8ba1;font-size:12px;line-height:1.5;">
+                A levelet a Fempy superadmin teszt-email funkciója küldte.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+  }
+
+  private buildTenantWelcomeEmailHtml(input: {
+    adminName: string;
+    email: string;
+    password: string;
+    appDownloadUrl: string;
+    adminWebUrl: string;
+    tenantName: string;
+    hasLogo: boolean;
+  }) {
+    const adminName = this.escapeHtml(input.adminName);
+    const email = this.escapeHtml(input.email);
+    const password = this.escapeHtml(input.password);
+    const appDownloadUrl = this.escapeHtml(input.appDownloadUrl);
+    const adminWebUrl = this.escapeHtml(input.adminWebUrl);
+    const tenantName = this.escapeHtml(input.tenantName);
+
+    return `
+<!doctype html>
+<html lang="hu">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Fempy hozzáférés</title>
+  </head>
+  <body style="margin:0;background:#f4f7fb;color:#162033;font-family:Arial,Helvetica,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f7fb;padding:32px 16px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:680px;background:#ffffff;border:1px solid #dde5ef;border-radius:12px;overflow:hidden;">
+            <tr>
+              <td style="padding:28px 36px;background:#ffffff;border-bottom:1px solid #e8eef5;">
+                ${
+                  input.hasLogo
+                    ? '<img src="cid:fempy-logo" width="210" alt="Fempy App" style="display:block;max-width:210px;height:auto;">'
+                    : '<div style="font-size:24px;font-weight:700;color:#162033;">Fempy</div>'
+                }
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:34px 36px 12px;">
+                <div style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#7b8ba1;font-weight:700;">Ingyenes tesztidőszak</div>
+                <h1 style="margin:10px 0 0;font-size:25px;line-height:1.28;color:#162033;font-weight:700;">Üdvözlünk a Fempy felületén</h1>
+                <p style="margin:10px 0 0;font-size:15px;line-height:1.6;color:#607089;">${tenantName} számára létrehoztuk az admin hozzáférést.</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:8px 36px 0;">
+                <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#27364a;">Kedves ${adminName}!</p>
+                <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#27364a;">Köszönjük megtisztelő érdeklődésed fejlesztésünk iránt. Az alkalmazást jelenleg ingyenes verzióban állítottuk be számodra. Az egy hónapos tesztidőszak alatt munkatársaiddal együtt lehetőségetek lesz kipróbálni többek között például a napi hangulat, napi kérdőív, egyéni fejlesztői és egyszerű riport funkciókat. A használat közbeni visszajelzéseknek örülünk, amelyek alapján a Fempy továbbfejlesztésén folyamatosan dolgozunk.</p>
+                <p style="margin:0 0 22px;font-size:16px;line-height:1.7;color:#27364a;">A letöltést az alábbi linkre kattintva, vagy Play Áruház / App Store-ból közvetlenül is megteheted. A belépéshez kérlek, az alábbi felhasználónevet és jelszót használd.</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:0 36px 26px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #d9e3ef;border-radius:10px;background:#f8fbff;">
+                  <tr>
+                    <td style="padding:18px 20px;border-bottom:1px solid #d9e3ef;">
+                      <div style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#7b8ba1;font-weight:700;">Felhasználónév</div>
+                      <div style="margin-top:5px;font-size:16px;color:#162033;font-weight:700;">${email}</div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:18px 20px;">
+                      <div style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#7b8ba1;font-weight:700;">Jelszó</div>
+                      <div style="margin-top:5px;font-size:16px;color:#162033;font-weight:700;">${password}</div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:0 36px 8px;">
+                <table role="presentation" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td style="border-radius:8px;background:#d4145a;">
+                      <a href="${appDownloadUrl}" style="display:inline-block;padding:13px 20px;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;">Alkalmazás letöltése</a>
+                    </td>
+                    <td width="12"></td>
+                    <td style="border-radius:8px;border:1px solid #b8c6d8;background:#ffffff;">
+                      <a href="${adminWebUrl}" style="display:inline-block;padding:12px 18px;color:#26374d;text-decoration:none;font-size:15px;font-weight:700;">Webes felület</a>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 36px 34px;">
+                <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#27364a;">Munkatársaid meghívását a webes felületen keresztül tudod megtenni, amit a következő linken keresztül érsz el:</p>
+                <p style="margin:0 0 22px;font-size:15px;line-height:1.6;color:#27364a;">Link: <a href="${adminWebUrl}" style="color:#d4145a;text-decoration:none;font-weight:700;">${adminWebUrl}</a></p>
+                <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#27364a;">Jó felfedezést és sikeres közös fejlődést kívánunk!</p>
+                <p style="margin:0;font-size:16px;line-height:1.7;color:#27364a;font-weight:700;">Fempy csapata</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 36px;background:#eef3f8;color:#7b8ba1;font-size:12px;line-height:1.5;">
+                Ezt az üzenetet azért kaptad, mert létrehoztunk számodra egy Fempy admin hozzáférést.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+  }
+
+  private buildTenantWelcomeEmailText(input: {
+    adminName: string;
+    email: string;
+    password: string;
+    appDownloadUrl: string;
+    adminWebUrl: string;
+  }) {
+    return `Kedves ${input.adminName}!
+
+Köszönjük megtisztelő érdeklődésed fejlesztésünk iránt. Az alkalmazást jelenleg ingyenes verzióban állítottuk be számodra. Az egy hónapos tesztidőszak alatt munkatársaiddal együtt lehetőségetek lesz kipróbálni többek között például a napi hangulat, napi kérdőív, egyéni fejlesztői és egyszerű riport funkciókat. A használat közbeni visszajelzéseknek örülünk, amelyek alapján a Fempy továbbfejlesztésén folyamatosan dolgozunk.
+
+A letöltést az alábbi linkre kattintva, vagy Play Áruház / App Store-ból közvetlenül is megteheted. A belépéshez kérlek, az alábbi felhasználónevet és jelszót használd.
+
+Letöltés: ${input.appDownloadUrl}
+Felhasználónév: ${input.email}
+Jelszó: ${input.password}
+
+Munkatársaid meghívását a webes felületen keresztül tudod megtenni, amit a következő linken keresztül érsz el:
+Link: ${input.adminWebUrl}
+
+Jó felfedezést és sikeres közös fejlődést kívánunk!
+Fempy csapata`;
+  }
+
+  private resolveMailLogoPath() {
+    const configuredPath = this.config.get<string>('MAIL_LOGO_PATH');
+    const candidates = [
+      configuredPath,
+      join(process.cwd(), 'dist', 'src', 'mail', 'assets', 'logo.png'),
+      join(process.cwd(), 'src', 'mail', 'assets', 'logo.png'),
+    ].filter(Boolean) as string[];
+
+    return candidates.find((path) => existsSync(path)) ?? null;
+  }
+
+  private escapeHtml(value: string) {
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 }

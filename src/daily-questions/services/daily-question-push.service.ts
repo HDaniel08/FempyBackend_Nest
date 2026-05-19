@@ -1,25 +1,42 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { NotificationsService } from '../../notifications/notifications.service';
 
 @Injectable()
 export class DailyQuestionPushService {
   private readonly logger = new Logger(DailyQuestionPushService.name);
 
+  constructor(private readonly notifications: NotificationsService) {}
+
   buildDefaultPush(topic: string) {
     return {
       title: 'Megérkezett a napi kérdőíved',
-      body: `Töltsd ki ha szeretnél többet megtudni magadról a(z) ${topic}ben`,
+      body: `Töltsd ki, ha szeretnél többet megtudni magadról a(z) ${topic} témában.`,
     };
   }
 
-  async sendToUsers(userIds: string[], payload: { title: string; body: string }) {
+  async sendToUsers(
+    tenantId: string,
+    userIds: string[],
+    payload: { title: string; body: string; data?: Record<string, any> },
+  ) {
     this.logger.log(
-      `Push küldés stub: users=${userIds.length}, title="${payload.title}"`,
+      `Push jobok sorba állítása: users=${userIds.length}, title="${payload.title}"`,
     );
 
-    // ide jön majd a valódi push integráció
+    const jobs = await Promise.all(
+      userIds.map((userId) =>
+        this.notifications.sendNow({
+          tenantId,
+          userId,
+          type: 'daily_question',
+          payload,
+        }),
+      ),
+    );
+
     return {
       success: true,
-      sentCount: userIds.length,
+      queuedCount: jobs.length,
       payload,
     };
   }

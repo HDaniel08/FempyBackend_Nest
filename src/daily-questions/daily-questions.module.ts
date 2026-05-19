@@ -11,10 +11,12 @@ import { DailyQuestionPushService } from './services/daily-question-push.service
 import { PrismaService } from '../prisma/prisma.service';
 import { DailyQuestionSchedulerService } from './services/daily-question-scheduler.service';
 import { DailyQuestionTopicReportService } from './services/daily-question-topic-report.service';
+import { DailyQuestionCampaignsService } from './services/daily-question-campaigns.service';
 import { ActivityModule } from '../activity/activity.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [ActivityModule, ScheduleModule.forRoot()],
+  imports: [ActivityModule, NotificationsModule, ScheduleModule.forRoot()],
   controllers: [DailyQuestionsAdminController, DailyQuestionsUserController],
   providers: [
     PrismaService,
@@ -26,6 +28,7 @@ import { ActivityModule } from '../activity/activity.module';
     DailyQuestionSchedulesService,
     DailyQuestionSchedulerService,
     DailyQuestionTopicReportService,
+    DailyQuestionCampaignsService,
   ],
   exports: [
     DailyQuestionsService,
@@ -33,6 +36,7 @@ import { ActivityModule } from '../activity/activity.module';
     DailyQuestionDispatchService,
     DailyQuestionAnswerService,
     DailyQuestionTopicReportService,
+    DailyQuestionCampaignsService,
   ],
 })
 export class DailyQuestionsModule {}

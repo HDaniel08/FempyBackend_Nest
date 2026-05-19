@@ -31,17 +31,11 @@ export class DailyQuestionSchedulesService {
       throw new NotFoundException('A kérdés nem található.');
     }
 
-    if (
-      dto.scheduleType === DailyQuestionScheduleType.ONE_TIME &&
-      !dto.runAt
-    ) {
+    if (dto.scheduleType === DailyQuestionScheduleType.ONE_TIME && !dto.runAt) {
       throw new BadRequestException('ONE_TIME schedule esetén runAt kötelező.');
     }
 
-    if (
-      dto.scheduleType === DailyQuestionScheduleType.CRON &&
-      !dto.cronExpr
-    ) {
+    if (dto.scheduleType === DailyQuestionScheduleType.CRON && !dto.cronExpr) {
       throw new BadRequestException('CRON schedule esetén cronExpr kötelező.');
     }
 
@@ -51,6 +45,7 @@ export class DailyQuestionSchedulesService {
         questionId: dto.questionId,
         name: dto.name,
         campaignKey: dto.campaignKey,
+        campaignDay: dto.campaignDay ?? 1,
         isActive: true,
         isDefaultWeekdayMorning: dto.isDefaultWeekdayMorning ?? false,
         scheduleType: dto.scheduleType,
@@ -100,6 +95,7 @@ export class DailyQuestionSchedulesService {
       data: {
         name: dto.name,
         campaignKey: dto.campaignKey,
+        campaignDay: dto.campaignDay,
         isDefaultWeekdayMorning: dto.isDefaultWeekdayMorning,
         scheduleType: dto.scheduleType,
         cronExpr: dto.cronExpr,

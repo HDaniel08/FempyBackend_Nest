@@ -2,8 +2,10 @@ import {
   IsBoolean,
   IsDateString,
   IsEnum,
+  IsInt,
   IsOptional,
   IsString,
+  Min,
 } from 'class-validator';
 import {
   DailyQuestionAudienceType,
@@ -21,6 +23,11 @@ export class CreateDailyQuestionScheduleDto {
   @IsOptional()
   @IsString()
   campaignKey?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  campaignDay?: number;
 
   @IsEnum(DailyQuestionScheduleType)
   scheduleType: DailyQuestionScheduleType;

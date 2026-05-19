@@ -22,11 +22,17 @@ export class DailyQuestionDispatchService {
     return { tenantId, userId };
   }
 
-  async triggerSchedule(userCtx: any, scheduleId: string, dto: TriggerDailyQuestionDto) {
+  async triggerSchedule(
+    userCtx: any,
+    scheduleId: string,
+    dto: TriggerDailyQuestionDto,
+  ) {
     const { tenantId, userId } = this.getCtxIds(userCtx);
 
     if (!tenantId) {
-      throw new BadRequestException('A manual trigger tenant környezetet igényel.');
+      throw new BadRequestException(
+        'A manual trigger tenant környezetet igényel.',
+      );
     }
 
     const schedule = await this.prisma.dailyQuestionSchedule.findFirst({
@@ -44,13 +50,57 @@ export class DailyQuestionDispatchService {
       throw new NotFoundException('Az aktív schedule nem található.');
     }
 
+    return this.dispatchScheduleForTenant({
+      tenantId,
+      schedule,
+      sentOn: dto.sentOn ? new Date(dto.sentOn) : this.startOfDay(new Date()),
+      triggeredByUserId: dto.triggeredByUserId || userId,
+    });
+  }
+
+  async triggerScheduleForTenant(input: {
+    tenantId: string;
+    scheduleId: string;
+    sentOn?: Date;
+    triggeredByUserId?: string | null;
+  }) {
+    const schedule = await this.prisma.dailyQuestionSchedule.findFirst({
+      where: {
+        id: input.scheduleId,
+        isActive: true,
+      },
+      include: {
+        question: true,
+      },
+    });
+
+    if (!schedule) {
+      throw new NotFoundException('Az aktív schedule nem található.');
+    }
+
+    return this.dispatchScheduleForTenant({
+      tenantId: input.tenantId,
+      schedule,
+      sentOn: input.sentOn ?? this.startOfDay(new Date()),
+      triggeredByUserId: input.triggeredByUserId ?? null,
+    });
+  }
+
+  private async dispatchScheduleForTenant(input: {
+    tenantId: string;
+    schedule: any;
+    sentOn: Date;
+    triggeredByUserId?: string | null;
+  }) {
+    const { tenantId, schedule } = input;
+
     const targetUsers = await this.audienceService.resolveUsers({
       tenantId,
       audienceType: schedule.audienceType,
       audienceConfig: schedule.audienceConfig,
     });
 
-    const sentOn = dto.sentOn ? new Date(dto.sentOn) : this.startOfDay(new Date());
+    const sentOn = this.startOfDay(input.sentOn);
 
     const pushPayload = {
       title:
@@ -62,24 +112,26 @@ export class DailyQuestionDispatchService {
     };
 
     const dispatch = await this.prisma.dailyQuestionDispatch.create({
-  data: {
-    tenantId,
-    questionId: schedule.questionId,
-    scheduleId: schedule.id,
-    campaignKey: schedule.campaignKey,
-    triggeredByUserId: dto.triggeredByUserId || userId,
-    sentOn,
-    sentAt: new Date(),
-    audienceType: schedule.audienceType,
-    audienceConfig:
-      schedule.audienceConfig === null || schedule.audienceConfig === undefined
-        ? undefined
-        : (schedule.audienceConfig as any),
-    pushTitle: pushPayload.title,
-    pushBody: pushPayload.body,
-    pushSent: false,
-  },
-});
+      data: {
+        tenantId,
+        questionId: schedule.questionId,
+        scheduleId: schedule.id,
+        campaignKey: schedule.campaignKey,
+        campaignDay: schedule.campaignDay ?? null,
+        triggeredByUserId: input.triggeredByUserId,
+        sentOn,
+        sentAt: new Date(),
+        audienceType: schedule.audienceType,
+        audienceConfig:
+          schedule.audienceConfig === null ||
+          schedule.audienceConfig === undefined
+            ? undefined
+            : (schedule.audienceConfig as any),
+        pushTitle: pushPayload.title,
+        pushBody: pushPayload.body,
+        pushSent: false,
+      },
+    });
 
     if (targetUsers.length > 0) {
       await this.prisma.dailyQuestionnaireAnswer.createMany({
@@ -99,8 +151,17 @@ export class DailyQuestionDispatchService {
 
     try {
       pushResult = await this.pushService.sendToUsers(
+        tenantId,
         targetUsers.map((u) => u.id),
-        pushPayload,
+        {
+          ...pushPayload,
+          data: {
+            type: 'daily_question',
+            dispatchId: dispatch.id,
+            campaignKey: schedule.campaignKey,
+            campaignDay: schedule.campaignDay ?? null,
+          },
+        },
       );
 
       await this.prisma.dailyQuestionDispatch.update({

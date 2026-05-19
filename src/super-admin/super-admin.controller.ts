@@ -1,10 +1,25 @@
-import { Body, Controller, Get, Header, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Header,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { SuperAdminGuard } from './super-admin.guard';
 import { SuperAdminService } from './super-admin.service';
+import { DailyQuestionCampaignsService } from '../daily-questions/services/daily-question-campaigns.service';
 
 @Controller('super-admin')
 export class SuperAdminController {
-  constructor(private readonly service: SuperAdminService) {}
+  constructor(
+    private readonly service: SuperAdminService,
+    private readonly dailyQuestionCampaigns: DailyQuestionCampaignsService,
+  ) {}
 
   @Post('login')
   login(@Body() body: { email: string; password: string }) {
@@ -42,13 +57,27 @@ export class SuperAdminController {
   }
 
   @UseGuards(SuperAdminGuard)
+  @Post('email/test')
+  sendTestEmail(
+    @Body() body: { email: string; name?: string },
+    @Req() req: any,
+  ) {
+    return this.service.sendTestEmail(body, req.platformAdmin, req);
+  }
+
+  @UseGuards(SuperAdminGuard)
   @Patch('tenants/:tenantId/app-access')
   updateTenantAccess(
     @Param('tenantId') tenantId: string,
     @Body() body: { enabled: boolean },
     @Req() req: any,
   ) {
-    return this.service.updateTenantAccess(tenantId, !!body.enabled, req.platformAdmin, req);
+    return this.service.updateTenantAccess(
+      tenantId,
+      !!body.enabled,
+      req.platformAdmin,
+      req,
+    );
   }
 
   @UseGuards(SuperAdminGuard)
@@ -101,15 +130,18 @@ export class SuperAdminController {
     },
     @Req() req: any,
   ) {
-    return this.service.updateTenantUser(tenantId, userId, body, req.platformAdmin, req);
+    return this.service.updateTenantUser(
+      tenantId,
+      userId,
+      body,
+      req.platformAdmin,
+      req,
+    );
   }
 
   @UseGuards(SuperAdminGuard)
   @Get('tenants/:tenantId/activity')
-  listTenantActivity(
-    @Param('tenantId') tenantId: string,
-    @Query() query: any,
-  ) {
+  listTenantActivity(@Param('tenantId') tenantId: string, @Query() query: any) {
     return this.service.listTenantActivity(tenantId, query);
   }
 
@@ -126,7 +158,10 @@ export class SuperAdminController {
 
   @UseGuards(SuperAdminGuard)
   @Get('tenants/:tenantId/activity/dashboard')
-  getTenantActivityDashboard(@Param('tenantId') tenantId: string, @Query() query: any) {
+  getTenantActivityDashboard(
+    @Param('tenantId') tenantId: string,
+    @Query() query: any,
+  ) {
     return this.service.getTenantActivityDashboard(tenantId, query);
   }
 
@@ -149,7 +184,12 @@ export class SuperAdminController {
     @Body() body: { reason?: string },
     @Req() req: any,
   ) {
-    return this.service.startSupportSession(tenantId, body, req.platformAdmin, req);
+    return this.service.startSupportSession(
+      tenantId,
+      body,
+      req.platformAdmin,
+      req,
+    );
   }
 
   @UseGuards(SuperAdminGuard)
@@ -159,7 +199,12 @@ export class SuperAdminController {
     @Param('sessionId') sessionId: string,
     @Req() req: any,
   ) {
-    return this.service.closeSupportSession(tenantId, sessionId, req.platformAdmin, req);
+    return this.service.closeSupportSession(
+      tenantId,
+      sessionId,
+      req.platformAdmin,
+      req,
+    );
   }
 
   @UseGuards(SuperAdminGuard)
@@ -220,6 +265,35 @@ export class SuperAdminController {
   @Get('campaigns')
   listCampaigns() {
     return this.service.listCampaigns();
+  }
+
+  @UseGuards(SuperAdminGuard)
+  @Get('daily-question-campaigns')
+  listDailyQuestionCampaigns() {
+    return this.dailyQuestionCampaigns.listCampaigns();
+  }
+
+  @UseGuards(SuperAdminGuard)
+  @Patch('daily-question-campaigns/schedules/:scheduleId')
+  updateDailyQuestionCampaignSchedule(
+    @Param('scheduleId') scheduleId: string,
+    @Body() body: { campaignDay?: number; isActive?: boolean },
+  ) {
+    return this.dailyQuestionCampaigns.updateScheduleDay(scheduleId, body);
+  }
+
+  @UseGuards(SuperAdminGuard)
+  @Post('daily-question-campaigns/:campaignKey/start')
+  startDailyQuestionCampaign(
+    @Param('campaignKey') campaignKey: string,
+    @Body() body: { tenantId: string },
+    @Req() req: any,
+  ) {
+    return this.dailyQuestionCampaigns.startCampaign({
+      tenantId: body.tenantId,
+      campaignKey,
+      triggeredByUserId: req.platformAdmin?.sub ?? null,
+    });
   }
 
   @UseGuards(SuperAdminGuard)
