@@ -14,12 +14,36 @@ import { ExpoPushService } from './expo-push.service';
   imports: [
     BullModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        connection: {
-          host: config.get<string>('REDIS_HOST') ?? 'localhost',
-          port: Number(config.get<string>('REDIS_PORT') ?? 6379),
-        },
-      }),
+      useFactory: (config: ConfigService) => {
+        const redisUrl = config.get<string>('REDIS_URL');
+
+        if (redisUrl) {
+          const url = new URL(redisUrl);
+          const tlsEnabled =
+            url.protocol === 'rediss:' ||
+            config.get<string>('REDIS_TLS') === 'true';
+
+          return {
+            connection: {
+              host: url.hostname,
+              port: Number(url.port || 6379),
+              username: decodeURIComponent(url.username || 'default'),
+              password: decodeURIComponent(url.password),
+              tls: tlsEnabled ? {} : undefined,
+            },
+          };
+        }
+
+        return {
+          connection: {
+            host: config.get<string>('REDIS_HOST') ?? 'localhost',
+            port: Number(config.get<string>('REDIS_PORT') ?? 6379),
+            username: config.get<string>('REDIS_USERNAME') || undefined,
+            password: config.get<string>('REDIS_PASSWORD') || undefined,
+            tls: config.get<string>('REDIS_TLS') === 'true' ? {} : undefined,
+          },
+        };
+      },
     }),
 
     // Ebben a modulban regisztráljuk a queue-t
