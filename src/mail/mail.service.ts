@@ -7,6 +7,8 @@ import { ConfigService } from '@nestjs/config';
 import nodemailer, { type Transporter } from 'nodemailer';
 import type Mail from 'nodemailer/lib/mailer';
 import type SMTPTransport from 'nodemailer/lib/smtp-transport';
+import { readFile } from 'node:fs/promises';
+import { basename } from 'node:path';
 
 export type MailRecipient = string | { email: string; name?: string };
 
@@ -22,18 +24,30 @@ export interface SendMailInput {
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
+  private readonly resendEndpoint = 'https://api.resend.com/emails';
   private transporter?: Transporter<SMTPTransport.SentMessageInfo>;
 
   constructor(private readonly config: ConfigService) {}
 
   async sendMail(input: SendMailInput) {
-    const transporter = this.getTransporter();
     const fromEmail = this.getRequiredConfig('SMTP_FROM_EMAIL');
     const fromName =
       this.config.get<string>('SMTP_FROM_NAME') ?? 'Fempy csapata';
     const defaultReplyTo = this.config.get<string>('SMTP_REPLY_TO');
+    const resendApiKey = this.config.get<string>('RESEND_API_KEY');
 
     try {
+      if (resendApiKey) {
+        return await this.sendWithResend(input, {
+          apiKey: resendApiKey,
+          fromEmail,
+          fromName,
+          replyTo: input.replyTo ?? defaultReplyTo,
+        });
+      }
+
+      const transporter = this.getTransporter();
+
       return await transporter.sendMail({
         from: { address: fromEmail, name: fromName },
         to: this.formatRecipient(input.to),
@@ -52,6 +66,54 @@ export class MailService {
       );
       throw new InternalServerErrorException('Email kuldese sikertelen');
     }
+  }
+
+  private async sendWithResend(
+    input: SendMailInput,
+    config: {
+      apiKey: string;
+      fromEmail: string;
+      fromName: string;
+      replyTo?: string;
+    },
+  ) {
+    this.logger.log(
+      `Resend HTTP email init: from=${config.fromEmail}, to=${this.formatRecipientForLog(input.to)}`,
+    );
+
+    const payload = {
+      from: `${config.fromName} <${config.fromEmail}>`,
+      to: [this.formatRecipientForResend(input.to)],
+      reply_to: config.replyTo ? [config.replyTo] : undefined,
+      subject: input.subject,
+      html: input.html,
+      text:
+        input.text ??
+        'Az uzenet megtekintesehez hasznaljon HTML-kompatibilis e-mail megjelenitot!',
+      attachments: input.attachments?.length
+        ? await this.formatAttachmentsForResend(input.attachments)
+        : undefined,
+    };
+
+    const response = await fetch(this.resendEndpoint, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const responseText = await response.text();
+    const responseBody = responseText ? this.tryParseJson(responseText) : null;
+
+    if (!response.ok) {
+      throw new Error(
+        `Resend API error ${response.status}: ${JSON.stringify(responseBody ?? responseText)}`,
+      );
+    }
+
+    return responseBody;
   }
 
   private getTransporter() {
@@ -111,5 +173,66 @@ export class MailService {
       address: recipient.email,
       name: recipient.name,
     };
+  }
+
+  private formatRecipientForResend(recipient: MailRecipient) {
+    if (typeof recipient === 'string') {
+      return recipient;
+    }
+
+    return recipient.name
+      ? `${recipient.name} <${recipient.email}>`
+      : recipient.email;
+  }
+
+  private formatRecipientForLog(recipient: MailRecipient) {
+    return typeof recipient === 'string' ? recipient : recipient.email;
+  }
+
+  private async formatAttachmentsForResend(attachments: Mail.Attachment[]) {
+    return Promise.all(
+      attachments.map(async (attachment) => {
+        const path =
+          typeof attachment.path === 'string' ? attachment.path : undefined;
+        const filename =
+          attachment.filename?.toString() ||
+          (path ? basename(path) : 'attachment');
+
+        if (path?.startsWith('http://') || path?.startsWith('https://')) {
+          return {
+            path,
+            filename,
+            content_id: attachment.cid,
+          };
+        }
+
+        const content = attachment.content
+          ? Buffer.isBuffer(attachment.content)
+            ? attachment.content
+            : Buffer.from(String(attachment.content))
+          : path
+            ? await readFile(path)
+            : undefined;
+
+        if (!content) {
+          throw new Error(`Email attachment content missing: ${filename}`);
+        }
+
+        return {
+          filename,
+          content: content.toString('base64'),
+          content_id: attachment.cid,
+          content_type: attachment.contentType,
+        };
+      }),
+    );
+  }
+
+  private tryParseJson(value: string) {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return value;
+    }
   }
 }
