@@ -31,6 +31,7 @@ import { ExpoPushService } from './expo-push.service';
             connection: {
               host: url.hostname,
               port: Number(url.port || 6379),
+              family: 0,
               username:
                 decodeURIComponent(url.username) ||
                 config.get<string>('REDIS_USERNAME') ||
@@ -48,6 +49,7 @@ import { ExpoPushService } from './expo-push.service';
           connection: {
             host: config.get<string>('REDIS_HOST') ?? 'localhost',
             port: Number(config.get<string>('REDIS_PORT') ?? 6379),
+            family: 0,
             username: config.get<string>('REDIS_USERNAME') || undefined,
             password: config.get<string>('REDIS_PASSWORD') || undefined,
             tls: config.get<string>('REDIS_TLS') === 'true' ? {} : undefined,
