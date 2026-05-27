@@ -44,6 +44,15 @@ export class UsersController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Patch("me/password")
+  async changeMyPassword(
+    @Req() req: any,
+    @Body() body: { currentPassword?: string; newPassword?: string },
+  ) {
+    return this.usersService.changeMyPassword(req.user, body);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get("me/goals")
   async getMyGoals(@Req() req: any) {
     return this.usersService.getMyGoals(req.user);

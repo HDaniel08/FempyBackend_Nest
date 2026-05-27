@@ -90,6 +90,35 @@ export class AdminUsersController {
     return updated;
   }
 
+  @Patch(':id/password')
+  async setUserPassword(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body()
+    body: {
+      newPassword?: string;
+      mustChangePassword?: boolean;
+    },
+  ) {
+    const updated = await this.usersService.adminSetUserPassword(
+      req.user.tenantId,
+      id,
+      body,
+    );
+    await this.activity.log({
+      tenantId: req.user.tenantId,
+      userId: id,
+      event: 'ADMIN_USER_PASSWORD_CHANGED',
+      source: 'admin',
+      entityType: 'USER',
+      entityId: id,
+      actor: { type: 'USER', id: req.user.sub },
+      metadata: { email: updated.email, mustChangePassword: updated.mustChangePassword },
+      request: this.activity.requestMeta(req),
+    });
+    return updated;
+  }
+
 @Patch(':id/deactivate')
 async deactivateUser(@Req() req: any, @Param('id') id: string) {
   const updated = await this.usersService.adminSetUserDeleted(

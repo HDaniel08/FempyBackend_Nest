@@ -181,6 +181,7 @@ export class AuthService {
         email: user.email,
         isLeader: user.isLeader,
         role: user.role,
+        mustChangePassword: user.mustChangePassword,
       },
       tenant: {
         id: user.tenant.id,

@@ -214,6 +214,7 @@ model User {
   lastName     String @map("last_name")
   email        String @unique
   passwordHash String @map("password_hash")
+  mustChangePassword Boolean @default(false) @map("must_change_password")
 
   role UserRole @default(USER)
 
