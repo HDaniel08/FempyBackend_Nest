@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
+import { ExpoPushService } from './expo-push.service';
 
 /**
  * NotificationsService:
@@ -13,6 +14,7 @@ import { PrismaService } from '../prisma/prisma.service';
 export class NotificationsService {
   constructor(
     private prisma: PrismaService,
+    private expoPush: ExpoPushService,
 
     // Ezzel kapjuk meg a "notifications" queue-t
     @InjectQueue('notifications') private queue: Queue,
@@ -98,5 +100,107 @@ export class NotificationsService {
     );
 
     return record;
+  }
+
+  async sendDirectNow(input: {
+    tenantId: string;
+    userId: string;
+    type: string;
+    payload: any;
+  }) {
+    const record = await this.prisma.notificationJob.create({
+      data: {
+        tenantId: input.tenantId,
+        userId: input.userId,
+        type: input.type,
+        payload: input.payload,
+        status: 'queued',
+      },
+    });
+
+    try {
+      return await this.deliverNotification(record.id, input);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+
+      return this.prisma.notificationJob.update({
+        where: { id: record.id },
+        data: {
+          status: 'failed',
+          errorMessage,
+          processedAt: new Date(),
+        },
+      });
+    }
+  }
+
+  private async deliverNotification(
+    notificationJobId: string,
+    input: {
+      tenantId: string;
+      userId: string;
+      payload: any;
+    },
+  ) {
+    const devices = await this.prisma.userDevice.findMany({
+      where: { tenantId: input.tenantId, userId: input.userId },
+      select: { id: true, expoToken: true },
+    });
+
+    const tokens = devices.map((device) => device.expoToken);
+    const result = await this.expoPush.sendToTokens({
+      tokens,
+      title: input.payload?.title ?? 'Fempy',
+      body: input.payload?.body ?? 'Teszt értesítés',
+      data: input.payload?.data ?? {},
+    });
+
+    const ticketErrors = result.tickets.filter(
+      (ticket: any) => ticket.status === 'error',
+    );
+
+    const deviceNotRegisteredTokens = ticketErrors
+      .filter((ticket: any) => ticket.details?.error === 'DeviceNotRegistered')
+      .map((ticket: any) => {
+        const index = result.tickets.indexOf(ticket);
+        return devices[index]?.expoToken;
+      })
+      .filter(Boolean);
+
+    if (deviceNotRegisteredTokens.length > 0) {
+      await this.prisma.userDevice.deleteMany({
+        where: {
+          tenantId: input.tenantId,
+          expoToken: { in: deviceNotRegisteredTokens },
+        },
+      });
+    }
+
+    if (ticketErrors.length > 0) {
+      const errorMessage = ticketErrors
+        .map(
+          (ticket: any) =>
+            `${ticket.details?.error ?? 'ExpoError'}: ${ticket.message}`,
+        )
+        .join(' | ');
+
+      return this.prisma.notificationJob.update({
+        where: { id: notificationJobId },
+        data: {
+          status: 'failed',
+          errorMessage,
+          processedAt: new Date(),
+        },
+      });
+    }
+
+    return this.prisma.notificationJob.update({
+      where: { id: notificationJobId },
+      data: {
+        status: 'sent',
+        processedAt: new Date(),
+      },
+    });
   }
 }

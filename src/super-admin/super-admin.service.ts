@@ -1321,7 +1321,7 @@ Fempy csapata`,
     const jobs: any[] = [];
     for (const user of users) {
       jobs.push(
-        await this.notifications.sendNow({
+        await this.notifications.sendDirectNow({
           tenantId: user.tenantId,
           userId: user.id,
           type: 'platform_push',
