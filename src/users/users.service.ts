@@ -408,7 +408,7 @@ export class UsersService {
 
     if (existing) {
       throw new BadRequestException(
-        'Ezzel az email cÃ­mmel mÃ¡r lÃ©tezik felhasznÃ¡lÃ³.',
+        'Ezzel az email címmel már létezik felhasználó.',
       );
     }
 
@@ -503,7 +503,7 @@ export class UsersService {
 
       if (activeAdminCount <= 1) {
         throw new BadRequestException(
-          'Az utolsÃ³ aktÃ­v adminisztrÃ¡tor szerepkÃ¶re nem mÃ³dosÃ­thatÃ³.',
+          'Az utolsó aktív adminisztrátor szerepköre nem módosítható.',
         );
       }
     }
@@ -520,7 +520,7 @@ export class UsersService {
 
       if (existing) {
         throw new BadRequestException(
-          'Ezzel az email cÃ­mmel mÃ¡r lÃ©tezik felhasznÃ¡lÃ³.',
+          'Ezzel az email címmel már létezik felhasználó.',
         );
       }
     }
@@ -569,19 +569,19 @@ export class UsersService {
 
     const newPassword = input.newPassword ?? '';
     if (newPassword.length < 8) {
-      throw new BadRequestException('Az Ãºj jelszÃ³ legalÃ¡bb 8 karakter legyen.');
+      throw new BadRequestException('Az új jelszó legalább 8 karakter legyen.');
     }
 
     if (!user.mustChangePassword) {
       const ok = await bcrypt.compare(input.currentPassword ?? '', user.passwordHash);
       if (!ok) {
-        throw new BadRequestException('A jelenlegi jelszÃ³ nem megfelelÅ‘.');
+        throw new BadRequestException('A jelenlegi jelszó nem megfelelő.');
       }
     }
 
     const same = await bcrypt.compare(newPassword, user.passwordHash);
     if (same) {
-      throw new BadRequestException('Az Ãºj jelszÃ³ nem egyezhet meg a jelenlegivel.');
+      throw new BadRequestException('Az új jelszó nem egyezhet meg a jelenlegivel.');
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
@@ -619,7 +619,7 @@ export class UsersService {
 
     const newPassword = input.newPassword ?? '';
     if (newPassword.length < 8) {
-      throw new BadRequestException('Az Ãºj jelszÃ³ legalÃ¡bb 8 karakter legyen.');
+      throw new BadRequestException('Az új jelszó legalább 8 karakter legyen.');
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
@@ -662,7 +662,7 @@ export class UsersService {
     }
 
     if (isDeleted && currentUserId && userId === currentUserId) {
-      throw new BadRequestException('SajÃ¡t magadat nem deaktivÃ¡lhatod.');
+      throw new BadRequestException('Saját magadat nem deaktiválhatod.');
     }
 
     if (isDeleted && user.role === 'ADMIN') {
@@ -676,7 +676,7 @@ export class UsersService {
 
       if (activeAdminCount <= 1) {
         throw new BadRequestException(
-          'Az utolsÃ³ aktÃ­v adminisztrÃ¡tort nem lehet deaktivÃ¡lni.',
+          'Az utolsó aktív adminisztrátort nem lehet deaktiválni.',
         );
       }
     }
@@ -774,7 +774,7 @@ export class UsersService {
 
       await this.mail.sendMail({
         to: { email: input.email, name: fullName },
-        subject: 'Fempy - Hozzaferesed elkÃ©szÃ¼lt',
+        subject: 'Fempy - Hozzáférésed elkészült',
         html: this.buildCoworkerWelcomeEmailHtml({
           fullName,
           email: input.email,
@@ -832,7 +832,7 @@ export class UsersService {
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Fempy hozzÃ¡fÃ©rÃ©s</title>
+    <title>Fempy hozzáférés</title>
   </head>
   <body style="margin:0;background:#f4f7fb;color:#162033;font-family:Arial,Helvetica,sans-serif;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f7fb;padding:32px 16px;">
@@ -850,16 +850,16 @@ export class UsersService {
             </tr>
             <tr>
               <td style="padding:32px 34px 10px;">
-                <div style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#7b8ba1;font-weight:700;">MeghÃ­vÃ¡s</div>
-                <h1 style="margin:10px 0 0;font-size:24px;line-height:1.3;color:#162033;font-weight:700;">HozzÃ¡fÃ©rÃ©st kaptÃ¡l a Fempy alkalmazÃ¡shoz</h1>
-                <p style="margin:10px 0 0;font-size:15px;line-height:1.6;color:#607089;">${tenantName} csapatÃ¡hoz kapcsolÃ³dva lÃ©trejÃ¶tt a fiÃ³kod.</p>
+                <div style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#7b8ba1;font-weight:700;">Meghívás</div>
+                <h1 style="margin:10px 0 0;font-size:24px;line-height:1.3;color:#162033;font-weight:700;">Hozzáférést kaptál a Fempy alkalmazáshoz</h1>
+                <p style="margin:10px 0 0;font-size:15px;line-height:1.6;color:#607089;">${tenantName} csapatához kapcsolódva létrejött a fiókod.</p>
               </td>
             </tr>
             <tr>
               <td style="padding:8px 34px 0;">
                 <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#27364a;">Kedves ${fullName}!</p>
-                <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#27364a;">MeghÃ­vÃ¡st kaptÃ¡l a Fempy alkalmazÃ¡sba, ahol egyszerÅ±en tudod hasznÃ¡lni a napi hangulat, napi kÃ©rdÅ‘Ã­v Ã©s egyÃ©ni fejlesztÅ‘i funkciÃ³kat.</p>
-                <p style="margin:0 0 22px;font-size:16px;line-height:1.7;color:#27364a;">Az alkalmazÃ¡st az alÃ¡bbi linken keresztÃ¼l tÃ¶ltheted le. A belÃ©pÃ©shez hasznÃ¡ld az alÃ¡bbi adatokat.</p>
+                <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#27364a;">Meghívást kaptál a Fempy alkalmazásba, ahol egyszerűen tudod használni a napi hangulat, napi kérdőív és egyéni fejlesztői funkciókat.</p>
+                <p style="margin:0 0 22px;font-size:16px;line-height:1.7;color:#27364a;">Az alkalmazást az alábbi linken keresztül töltheted le. A belépéshez használd az alábbi adatokat.</p>
               </td>
             </tr>
             <tr>
@@ -867,13 +867,13 @@ export class UsersService {
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #d9e3ef;border-radius:10px;background:#f8fbff;">
                   <tr>
                     <td style="padding:17px 20px;border-bottom:1px solid #d9e3ef;">
-                      <div style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#7b8ba1;font-weight:700;">FelhasznÃ¡lÃ³nÃ©v</div>
+                      <div style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#7b8ba1;font-weight:700;">Felhasználónév</div>
                       <div style="margin-top:5px;font-size:16px;color:#162033;font-weight:700;">${email}</div>
                     </td>
                   </tr>
                   <tr>
                     <td style="padding:17px 20px;">
-                      <div style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#7b8ba1;font-weight:700;">JelszÃ³</div>
+                      <div style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#7b8ba1;font-weight:700;">Jelszó</div>
                       <div style="margin-top:5px;font-size:16px;color:#162033;font-weight:700;">${password}</div>
                       <div style="margin-top:8px;font-size:13px;line-height:1.5;color:#607089;">Kérlek, az első belépés után biztonsági okokból változtasd meg a jelszavad.</div>
                     </td>
@@ -886,11 +886,11 @@ export class UsersService {
                 <table role="presentation" cellpadding="0" cellspacing="0">
                   <tr>
                     <td style="border-radius:8px;background:#d4145a;">
-                      <a href="${appDownloadUrl}" style="display:inline-block;padding:13px 20px;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;">AlkalmazÃ¡s letÃ¶ltÃ©se</a>
+                      <a href="${appDownloadUrl}" style="display:inline-block;padding:13px 20px;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;">Alkalmazás letöltése</a>
                     </td>
                     <td width="12"></td>
                     <td style="border-radius:8px;border:1px solid #b8c6d8;background:#ffffff;">
-                      <a href="${adminWebUrl}" style="display:inline-block;padding:12px 18px;color:#26374d;text-decoration:none;font-size:15px;font-weight:700;">Webes felÃ¼let</a>
+                      <a href="${adminWebUrl}" style="display:inline-block;padding:12px 18px;color:#26374d;text-decoration:none;font-size:15px;font-weight:700;">Webes felület</a>
                     </td>
                   </tr>
                 </table>
@@ -898,13 +898,13 @@ export class UsersService {
             </tr>
             <tr>
               <td style="padding:18px 34px 34px;">
-                <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#27364a;">JÃ³ felfedezÃ©st Ã©s sikeres kÃ¶zÃ¶s fejlÅ‘dÃ©st kÃ­vÃ¡nunk!</p>
+                <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#27364a;">Jó felfedezést és sikeres közös fejlődést kívánunk!</p>
                 <p style="margin:0;font-size:16px;line-height:1.7;color:#27364a;font-weight:700;">Fempy csapata</p>
               </td>
             </tr>
             <tr>
               <td style="padding:18px 34px;background:#eef3f8;color:#7b8ba1;font-size:12px;line-height:1.5;">
-                Ezt az Ã¼zenetet azÃ©rt kaptad, mert meghÃ­vÃ¡st kaptÃ¡l a Fempy alkalmazÃ¡sba.
+                Ezt az üzenetet azért kaptad, mert meghívást kaptál a Fempy alkalmazásba.
               </td>
             </tr>
           </table>
@@ -925,16 +925,16 @@ export class UsersService {
   }) {
     return `Kedves ${input.fullName}!
 
-MeghÃ­vÃ¡st kaptÃ¡l a Fempy alkalmazÃ¡sba a(z) ${input.tenantName} csapatÃ¡hoz kapcsolÃ³dva, ahol egyszerÅ±en tudod hasznÃ¡lni a napi hangulat, napi kÃ©rdÅ‘Ã­v Ã©s egyÃ©ni fejlesztÅ‘i funkciÃ³kat.
+Meghívást kaptál a Fempy alkalmazásba a(z) ${input.tenantName} csapatához kapcsolódva, ahol egyszerűen tudod használni a napi hangulat, napi kérdőív és egyéni fejlesztői funkciókat.
 
-LetÃ¶ltÃ©s: ${input.appDownloadUrl}
-FelhasznÃ¡lÃ³nÃ©v: ${input.email}
-JelszÃ³: ${input.password}
-KÃ©rlek, az elsÅ‘ belÃ©pÃ©s utÃ¡n biztonsÃ¡gi okokbÃ³l vÃ¡ltoztasd meg a jelszavad.
+Letöltés: ${input.appDownloadUrl}
+Felhasználónév: ${input.email}
+Jelszó: ${input.password}
+Kérlek, az első belépés után biztonsági okokból változtasd meg a jelszavad.
 
-Webes felÃ¼let: ${input.adminWebUrl}
+Webes felület: ${input.adminWebUrl}
 
-JÃ³ felfedezÃ©st Ã©s sikeres kÃ¶zÃ¶s fejlÅ‘dÃ©st kÃ­vÃ¡nunk!
+Jó felfedezést és sikeres közös fejlődést kívánunk!
 Fempy csapata`;
   }
 

@@ -52,11 +52,11 @@ export class SuperAdminService {
     });
 
     if (!admin || !admin.isActive) {
-      throw new UnauthorizedException('HibÃ¡s email vagy jelszÃ³.');
+      throw new UnauthorizedException('Hibás email vagy jelszó.');
     }
 
     const ok = await bcrypt.compare(input.password, admin.passwordHash);
-    if (!ok) throw new UnauthorizedException('HibÃ¡s email vagy jelszÃ³.');
+    if (!ok) throw new UnauthorizedException('Hibás email vagy jelszó.');
 
     const accessToken = await this.jwt.signAsync({
       sub: admin.id,
@@ -258,7 +258,7 @@ export class SuperAdminService {
     const adminName = input.adminName?.trim();
 
     if (!name || !slug || !email || !adminName || !input.adminPassword) {
-      throw new BadRequestException('Minden mezÅ‘ kitÃ¶ltÃ©se kÃ¶telezÅ‘.');
+      throw new BadRequestException('Minden mező kitöltése kötelező.');
     }
 
     const [firstName, ...rest] = adminName.split(/\s+/);
@@ -349,10 +349,10 @@ export class SuperAdminService {
     req?: any,
   ) {
     const email = input.email?.trim().toLowerCase();
-    const name = input.name?.trim() || 'Teszt felhasznÃ¡lÃ³';
+    const name = input.name?.trim() || 'Teszt felhasználó';
 
     if (!email) {
-      throw new BadRequestException('Email cÃ­m megadÃ¡sa kÃ¶telezÅ‘.');
+      throw new BadRequestException('Email cím megadása kötelező.');
     }
 
     const appDownloadUrl =
@@ -374,10 +374,10 @@ export class SuperAdminService {
       }),
       text: `Kedves ${name}!
 
-Ez egy Fempy teszt email. Ha ezt az Ã¼zenetet megkaptad, az SMTP email szolgÃ¡ltatÃ¡s mÅ±kÃ¶dik.
+Ez egy Fempy teszt email. Ha ezt az üzenetet megkaptad, az email szolgáltatás működik.
 
-AlkalmazÃ¡s: ${appDownloadUrl}
-Webes felÃ¼let: ${adminWebUrl}
+Alkalmazás: ${appDownloadUrl}
+Webes felület: ${adminWebUrl}
 
 Fempy csapata`,
       attachments: logoPath
@@ -438,7 +438,7 @@ Fempy csapata`,
   ) {
     const reason = input.reason?.trim();
     if (!reason) {
-      throw new BadRequestException('Support ok megadasa kotelezo.');
+      throw new BadRequestException('Support ok megadása kötelező.');
     }
 
     const tenant = await this.prisma.tenant.findUnique({
@@ -450,7 +450,7 @@ Fempy csapata`,
         appAccessEnabled: true,
       },
     });
-    if (!tenant) throw new NotFoundException('Tenant nem talalhato.');
+    if (!tenant) throw new NotFoundException('Tenant nem található.');
 
     const adminUser = await this.prisma.user.findFirst({
       where: {
@@ -470,7 +470,7 @@ Fempy csapata`,
     });
     if (!adminUser) {
       throw new BadRequestException(
-        'A tenantban nincs aktiv admin felhasznalo.',
+        'A tenantban nincs aktív admin felhasználó.',
       );
     }
 
@@ -538,7 +538,7 @@ Fempy csapata`,
       where: { id: tenantId },
       select: { id: true, name: true, slug: true },
     });
-    if (!tenant) throw new NotFoundException('Tenant nem talalhato.');
+    if (!tenant) throw new NotFoundException('Tenant nem található.');
 
     await this.activity.log({
       tenantId,
@@ -577,7 +577,7 @@ Fempy csapata`,
       },
     });
 
-    if (!tenant) throw new NotFoundException('Tenant nem talÃƒÂ¡lhatÃƒÂ³.');
+    if (!tenant) throw new NotFoundException('Tenant nem található.');
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -798,13 +798,13 @@ Fempy csapata`,
     const user = await this.prisma.user.findFirst({
       where: { id: userId, tenantId },
     });
-    if (!user) throw new NotFoundException('User nem talÃƒÂ¡lhatÃƒÂ³.');
+    if (!user) throw new NotFoundException('User nem található.');
 
     const data: any = {};
 
     if (input.role !== undefined) {
       if (!Object.values(UserRole).includes(input.role)) {
-        throw new BadRequestException('Ãƒâ€°rvÃƒÂ©nytelen szerepkÃƒÂ¶r.');
+        throw new BadRequestException('Érvénytelen szerepkör.');
       }
 
       if (user.role === UserRole.ADMIN && input.role !== UserRole.ADMIN) {
@@ -833,13 +833,13 @@ Fempy csapata`,
           select: { id: true },
         });
         if (!position)
-          throw new BadRequestException('Ãƒâ€°rvÃƒÂ©nytelen pozÃƒÂ­ciÃƒÂ³.');
+          throw new BadRequestException('Érvénytelen pozíció.');
       }
       data.positionId = input.positionId ?? null;
     }
 
     if (Object.keys(data).length === 0) {
-      throw new BadRequestException('Nincs mÃƒÂ³dosÃƒÂ­tandÃƒÂ³ adat.');
+      throw new BadRequestException('Nincs módosítandó adat.');
     }
 
     const updated = await this.prisma.user.update({
@@ -898,7 +898,7 @@ Fempy csapata`,
       where: { id: tenantId },
       select: { id: true },
     });
-    if (!tenant) throw new NotFoundException('Tenant nem talÃƒÂ¡lhatÃƒÂ³.');
+    if (!tenant) throw new NotFoundException('Tenant nem található.');
 
     const maxLimit = query?._export ? 1000 : 200;
     const limit = Math.min(Math.max(Number(query?.limit ?? 80), 1), maxLimit);
@@ -1025,7 +1025,7 @@ Fempy csapata`,
     const session = await this.prisma.supportSession.findFirst({
       where: { id: sessionId, tenantId, platformAdminId: actor.sub },
     });
-    if (!session) throw new NotFoundException('Support session nem talalhato.');
+    if (!session) throw new NotFoundException('Support session nem található.');
 
     const closed = await this.prisma.supportSession.update({
       where: { id: sessionId },
@@ -1167,9 +1167,9 @@ Fempy csapata`,
             : failedLogins >= 5
               ? 'warning'
               : 'ok',
-        title: 'Sikertelen loginok',
+        title: 'Sikertelen belépések',
         value: failedLogins,
-        detail: 'Az utolso 1 oraban.',
+        detail: 'Az utolsó 1 órában.',
       },
       {
         id: 'notification-errors',
@@ -1179,23 +1179,23 @@ Fempy csapata`,
             : notificationErrors > 0
               ? 'warning'
               : 'ok',
-        title: 'Notification hibak',
+        title: 'Értesítési hibák',
         value: notificationErrors,
-        detail: 'Failed notification jobok az utolso 1 oraban.',
+        detail: 'Sikertelen értesítési feladatok az utolsó 1 órában.',
       },
       {
         id: 'app-disabled',
         severity: appAccessDisabled > 0 ? 'warning' : 'ok',
-        title: 'App hozzaferes tiltasa',
+        title: 'App hozzáférés tiltása',
         value: appAccessDisabled,
-        detail: 'Az utolso 24 oraban.',
+        detail: 'Az utolsó 24 órában.',
       },
       {
         id: 'long-support-session',
         severity: supportSessions > 0 ? 'warning' : 'ok',
-        title: 'Hosszu support session',
+        title: 'Hosszú support session',
         value: supportSessions,
-        detail: '8 oranal regebbi aktiv session.',
+        detail: '8 óránál régebbi aktív session.',
       },
     ];
   }
@@ -1269,7 +1269,7 @@ Fempy csapata`,
         groups.set(key, {
           id: key,
           tenantId: schedule.tenantId,
-          tenantName: schedule.tenant?.name ?? 'GlobÃ¡lis',
+          tenantName: schedule.tenant?.name ?? 'Globális',
           campaignKey: schedule.campaignKey,
           name: schedule.name ?? schedule.campaignKey,
           topicName:
@@ -1314,7 +1314,7 @@ Fempy csapata`,
     req?: any,
   ) {
     if (!input.title?.trim() || !input.body?.trim()) {
-      throw new BadRequestException('A cÃ­m Ã©s szÃ¶veg kÃ¶telezÅ‘.');
+      throw new BadRequestException('A cím és szöveg kötelező.');
     }
 
     const users = await this.resolvePushUsers(input.filters ?? {});
@@ -1415,7 +1415,7 @@ Fempy csapata`,
       where: { id: tenantId },
       select: { id: true },
     });
-    if (!tenant) throw new NotFoundException('Tenant nem talalhato.');
+    if (!tenant) throw new NotFoundException('Tenant nem található.');
     return tenant;
   }
 
@@ -1473,7 +1473,7 @@ Fempy csapata`,
 
     if (activeAdminCount < 1) {
       throw new BadRequestException(
-        'Az utolsÃƒÂ³ aktÃƒÂ­v adminisztrÃƒÂ¡tor nem mÃƒÂ³dosÃƒÂ­thatÃƒÂ³.',
+        'Az utolsó aktív adminisztrátor nem módosítható.',
       );
     }
   }
@@ -1495,7 +1495,7 @@ Fempy csapata`,
 
       await this.mail.sendMail({
         to: { email: input.email, name: input.adminName },
-        subject: 'Fempy - Hozzaferes az ingyenes tesztidoszakhoz',
+        subject: 'Fempy - Hozzáférés az ingyenes tesztidőszakhoz',
         html: this.buildTenantWelcomeEmailHtml({
           adminName: input.adminName,
           email: input.email,
@@ -1564,22 +1564,22 @@ Fempy csapata`,
             </tr>
             <tr>
               <td style="padding:34px 34px 10px;">
-                <div style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#7b8ba1;font-weight:700;">Email szolgÃ¡ltatÃ¡s teszt</div>
+                <div style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#7b8ba1;font-weight:700;">Email szolgáltatás teszt</div>
                 <h1 style="margin:10px 0 0;font-size:24px;line-height:1.3;color:#162033;font-weight:700;">Sikeres teszt email</h1>
               </td>
             </tr>
             <tr>
               <td style="padding:8px 34px 30px;">
                 <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#27364a;">Kedves ${name}!</p>
-                <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#27364a;">Ez egy Fempy teszt email. Ha ezt az Ã¼zenetet megkaptad, az SMTP email szolgÃ¡ltatÃ¡s mÅ±kÃ¶dik.</p>
+                <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#27364a;">Ez egy Fempy teszt email. Ha ezt az üzenetet megkaptad, az email szolgáltatás működik.</p>
                 <table role="presentation" cellpadding="0" cellspacing="0">
                   <tr>
                     <td style="border-radius:8px;background:#d4145a;">
-                      <a href="${appDownloadUrl}" style="display:inline-block;padding:13px 20px;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;">AlkalmazÃ¡s link</a>
+                      <a href="${appDownloadUrl}" style="display:inline-block;padding:13px 20px;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;">Alkalmazás link</a>
                     </td>
                     <td width="12"></td>
                     <td style="border-radius:8px;border:1px solid #b8c6d8;background:#ffffff;">
-                      <a href="${adminWebUrl}" style="display:inline-block;padding:12px 18px;color:#26374d;text-decoration:none;font-size:15px;font-weight:700;">Webes felÃ¼let</a>
+                      <a href="${adminWebUrl}" style="display:inline-block;padding:12px 18px;color:#26374d;text-decoration:none;font-size:15px;font-weight:700;">Webes felület</a>
                     </td>
                   </tr>
                 </table>
@@ -1587,7 +1587,7 @@ Fempy csapata`,
             </tr>
             <tr>
               <td style="padding:18px 34px;background:#eef3f8;color:#7b8ba1;font-size:12px;line-height:1.5;">
-                A levelet a Fempy superadmin teszt-email funkciÃ³ja kÃ¼ldte.
+                A levelet a Fempy superadmin teszt-email funkciója küldte.
               </td>
             </tr>
           </table>
@@ -1620,7 +1620,7 @@ Fempy csapata`,
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Fempy hozzÃ¡fÃ©rÃ©s</title>
+    <title>Fempy hozzáférés</title>
   </head>
   <body style="margin:0;background:#f4f7fb;color:#162033;font-family:Arial,Helvetica,sans-serif;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f7fb;padding:32px 16px;">
@@ -1638,16 +1638,16 @@ Fempy csapata`,
             </tr>
             <tr>
               <td style="padding:34px 36px 12px;">
-                <div style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#7b8ba1;font-weight:700;">Ingyenes tesztidÅ‘szak</div>
-                <h1 style="margin:10px 0 0;font-size:25px;line-height:1.28;color:#162033;font-weight:700;">ÃœdvÃ¶zlÃ¼nk a Fempy felÃ¼letÃ©n</h1>
-                <p style="margin:10px 0 0;font-size:15px;line-height:1.6;color:#607089;">${tenantName} szÃ¡mÃ¡ra lÃ©trehoztuk az admin hozzÃ¡fÃ©rÃ©st.</p>
+                <div style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#7b8ba1;font-weight:700;">Ingyenes tesztidőszak</div>
+                <h1 style="margin:10px 0 0;font-size:25px;line-height:1.28;color:#162033;font-weight:700;">Üdvözlünk a Fempy felületén</h1>
+                <p style="margin:10px 0 0;font-size:15px;line-height:1.6;color:#607089;">${tenantName} számára létrehoztuk az admin hozzáférést.</p>
               </td>
             </tr>
             <tr>
               <td style="padding:8px 36px 0;">
                 <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#27364a;">Kedves ${adminName}!</p>
-                <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#27364a;">KÃ¶szÃ¶njÃ¼k megtisztelÅ‘ Ã©rdeklÅ‘dÃ©sed fejlesztÃ©sÃ¼nk irÃ¡nt. Az alkalmazÃ¡st jelenleg ingyenes verziÃ³ban Ã¡llÃ­tottuk be szÃ¡modra. Az egy hÃ³napos tesztidÅ‘szak alatt munkatÃ¡rsaiddal egyÃ¼tt lehetÅ‘sÃ©getek lesz kiprÃ³bÃ¡lni tÃ¶bbek kÃ¶zÃ¶tt pÃ©ldÃ¡ul a napi hangulat, napi kÃ©rdÅ‘Ã­v, egyÃ©ni fejlesztÅ‘i Ã©s egyszerÅ± riport funkciÃ³kat. A hasznÃ¡lat kÃ¶zbeni visszajelzÃ©seknek Ã¶rÃ¼lÃ¼nk, amelyek alapjÃ¡n a Fempy tovÃ¡bbfejlesztÃ©sÃ©n folyamatosan dolgozunk.</p>
-                <p style="margin:0 0 22px;font-size:16px;line-height:1.7;color:#27364a;">A letÃ¶ltÃ©st az alÃ¡bbi linkre kattintva, vagy Play ÃruhÃ¡z / App Store-bÃ³l kÃ¶zvetlenÃ¼l is megteheted. A belÃ©pÃ©shez kÃ©rlek, az alÃ¡bbi felhasznÃ¡lÃ³nevet Ã©s jelszÃ³t hasznÃ¡ld.</p>
+                <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#27364a;">Köszönjük megtisztelő érdeklődésed fejlesztésünk iránt. Az alkalmazást jelenleg ingyenes verzióban állítottuk be számodra. Az egy hónapos tesztidőszak alatt munkatársaiddal együtt lehetőségetek lesz kipróbálni többek között például a napi hangulat, napi kérdőív, egyéni fejlesztői és egyszerű riport funkciókat. A használat közbeni visszajelzéseknek örülünk, amelyek alapján a Fempy továbbfejlesztésén folyamatosan dolgozunk.</p>
+                <p style="margin:0 0 22px;font-size:16px;line-height:1.7;color:#27364a;">A letöltést az alábbi linkre kattintva, vagy Play Áruház / App Store-ból közvetlenül is megteheted. A belépéshez kérlek, az alábbi felhasználónevet és jelszót használd.</p>
               </td>
             </tr>
             <tr>
@@ -1655,13 +1655,13 @@ Fempy csapata`,
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #d9e3ef;border-radius:10px;background:#f8fbff;">
                   <tr>
                     <td style="padding:18px 20px;border-bottom:1px solid #d9e3ef;">
-                      <div style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#7b8ba1;font-weight:700;">FelhasznÃ¡lÃ³nÃ©v</div>
+                      <div style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#7b8ba1;font-weight:700;">Felhasználónév</div>
                       <div style="margin-top:5px;font-size:16px;color:#162033;font-weight:700;">${email}</div>
                     </td>
                   </tr>
                   <tr>
                     <td style="padding:18px 20px;">
-                      <div style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#7b8ba1;font-weight:700;">JelszÃ³</div>
+                      <div style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#7b8ba1;font-weight:700;">Jelszó</div>
                       <div style="margin-top:5px;font-size:16px;color:#162033;font-weight:700;">${password}</div>
                       <div style="margin-top:8px;font-size:13px;line-height:1.5;color:#607089;">Kérlek, az első belépés után biztonsági okokból változtasd meg a jelszavad.</div>
                     </td>
@@ -1674,11 +1674,11 @@ Fempy csapata`,
                 <table role="presentation" cellpadding="0" cellspacing="0">
                   <tr>
                     <td style="border-radius:8px;background:#d4145a;">
-                      <a href="${appDownloadUrl}" style="display:inline-block;padding:13px 20px;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;">AlkalmazÃ¡s letÃ¶ltÃ©se</a>
+                      <a href="${appDownloadUrl}" style="display:inline-block;padding:13px 20px;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;">Alkalmazás letöltése</a>
                     </td>
                     <td width="12"></td>
                     <td style="border-radius:8px;border:1px solid #b8c6d8;background:#ffffff;">
-                      <a href="${adminWebUrl}" style="display:inline-block;padding:12px 18px;color:#26374d;text-decoration:none;font-size:15px;font-weight:700;">Webes felÃ¼let</a>
+                      <a href="${adminWebUrl}" style="display:inline-block;padding:12px 18px;color:#26374d;text-decoration:none;font-size:15px;font-weight:700;">Webes felület</a>
                     </td>
                   </tr>
                 </table>
@@ -1686,15 +1686,15 @@ Fempy csapata`,
             </tr>
             <tr>
               <td style="padding:18px 36px 34px;">
-                <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#27364a;">MunkatÃ¡rsaid meghÃ­vÃ¡sÃ¡t a webes felÃ¼leten keresztÃ¼l tudod megtenni, amit a kÃ¶vetkezÅ‘ linken keresztÃ¼l Ã©rsz el:</p>
+                <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#27364a;">Munkatársaid meghívását a webes felületen keresztül tudod megtenni, amit a következő linken keresztül érsz el:</p>
                 <p style="margin:0 0 22px;font-size:15px;line-height:1.6;color:#27364a;">Link: <a href="${adminWebUrl}" style="color:#d4145a;text-decoration:none;font-weight:700;">${adminWebUrl}</a></p>
-                <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#27364a;">JÃ³ felfedezÃ©st Ã©s sikeres kÃ¶zÃ¶s fejlÅ‘dÃ©st kÃ­vÃ¡nunk!</p>
+                <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#27364a;">Jó felfedezést és sikeres közös fejlődést kívánunk!</p>
                 <p style="margin:0;font-size:16px;line-height:1.7;color:#27364a;font-weight:700;">Fempy csapata</p>
               </td>
             </tr>
             <tr>
               <td style="padding:18px 36px;background:#eef3f8;color:#7b8ba1;font-size:12px;line-height:1.5;">
-                Ezt az Ã¼zenetet azÃ©rt kaptad, mert lÃ©trehoztunk szÃ¡modra egy Fempy admin hozzÃ¡fÃ©rÃ©st.
+                Ezt az üzenetet azért kaptad, mert létrehoztunk számodra egy Fempy admin hozzáférést.
               </td>
             </tr>
           </table>
@@ -1714,19 +1714,19 @@ Fempy csapata`,
   }) {
     return `Kedves ${input.adminName}!
 
-KÃ¶szÃ¶njÃ¼k megtisztelÅ‘ Ã©rdeklÅ‘dÃ©sed fejlesztÃ©sÃ¼nk irÃ¡nt. Az alkalmazÃ¡st jelenleg ingyenes verziÃ³ban Ã¡llÃ­tottuk be szÃ¡modra. Az egy hÃ³napos tesztidÅ‘szak alatt munkatÃ¡rsaiddal egyÃ¼tt lehetÅ‘sÃ©getek lesz kiprÃ³bÃ¡lni tÃ¶bbek kÃ¶zÃ¶tt pÃ©ldÃ¡ul a napi hangulat, napi kÃ©rdÅ‘Ã­v, egyÃ©ni fejlesztÅ‘i Ã©s egyszerÅ± riport funkciÃ³kat. A hasznÃ¡lat kÃ¶zbeni visszajelzÃ©seknek Ã¶rÃ¼lÃ¼nk, amelyek alapjÃ¡n a Fempy tovÃ¡bbfejlesztÃ©sÃ©n folyamatosan dolgozunk.
+Köszönjük megtisztelő érdeklődésed fejlesztésünk iránt. Az alkalmazást jelenleg ingyenes verzióban állítottuk be számodra. Az egy hónapos tesztidőszak alatt munkatársaiddal együtt lehetőségetek lesz kipróbálni többek között például a napi hangulat, napi kérdőív, egyéni fejlesztői és egyszerű riport funkciókat. A használat közbeni visszajelzéseknek örülünk, amelyek alapján a Fempy továbbfejlesztésén folyamatosan dolgozunk.
 
-A letÃ¶ltÃ©st az alÃ¡bbi linkre kattintva, vagy Play ÃruhÃ¡z / App Store-bÃ³l kÃ¶zvetlenÃ¼l is megteheted. A belÃ©pÃ©shez kÃ©rlek, az alÃ¡bbi felhasznÃ¡lÃ³nevet Ã©s jelszÃ³t hasznÃ¡ld.
+A letöltést az alábbi linkre kattintva, vagy Play Áruház / App Store-ból közvetlenül is megteheted. A belépéshez kérlek, az alábbi felhasználónevet és jelszót használd.
 
-LetÃ¶ltÃ©s: ${input.appDownloadUrl}
-FelhasznÃ¡lÃ³nÃ©v: ${input.email}
-JelszÃ³: ${input.password}
-KÃ©rlek, az elsÅ‘ belÃ©pÃ©s utÃ¡n biztonsÃ¡gi okokbÃ³l vÃ¡ltoztasd meg a jelszavad.
+Letöltés: ${input.appDownloadUrl}
+Felhasználónév: ${input.email}
+Jelszó: ${input.password}
+Kérlek, az első belépés után biztonsági okokból változtasd meg a jelszavad.
 
-MunkatÃ¡rsaid meghÃ­vÃ¡sÃ¡t a webes felÃ¼leten keresztÃ¼l tudod megtenni, amit a kÃ¶vetkezÅ‘ linken keresztÃ¼l Ã©rsz el:
+Munkatársaid meghívását a webes felületen keresztül tudod megtenni, amit a következő linken keresztül érsz el:
 Link: ${input.adminWebUrl}
 
-JÃ³ felfedezÃ©st Ã©s sikeres kÃ¶zÃ¶s fejlÅ‘dÃ©st kÃ­vÃ¡nunk!
+Jó felfedezést és sikeres közös fejlődést kívánunk!
 Fempy csapata`;
   }
 

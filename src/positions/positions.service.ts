@@ -50,7 +50,7 @@ export class PositionsService {
       });
 
       if (!parent) {
-        throw new NotFoundException('Parent position not found');
+        throw new NotFoundException('A szülő pozíció nem található.');
       }
     }
 
@@ -80,12 +80,12 @@ export class PositionsService {
     });
 
     if (!position) {
-      throw new NotFoundException('Position not found');
+      throw new NotFoundException('A pozíció nem található.');
     }
 
     if (input.parentId) {
       if (input.parentId === positionId) {
-        throw new BadRequestException('Position cannot be parent of itself');
+        throw new BadRequestException('A pozíció nem lehet saját maga szülője.');
       }
 
       const parent = await this.prisma.position.findFirst({
@@ -97,7 +97,7 @@ export class PositionsService {
       });
 
       if (!parent) {
-        throw new NotFoundException('Parent position not found');
+        throw new NotFoundException('A szülő pozíció nem található.');
       }
     }
 
@@ -125,12 +125,12 @@ export class PositionsService {
     });
 
     if (!position) {
-      throw new NotFoundException('Position not found');
+      throw new NotFoundException('A pozíció nem található.');
     }
 
     if (position._count.users > 0) {
       throw new BadRequestException(
-        'Position has assigned users, remove them first',
+        'A pozícióhoz felhasználók tartoznak, előbb helyezd át őket.',
       );
     }
 

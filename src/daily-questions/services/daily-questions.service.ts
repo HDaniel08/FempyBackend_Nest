@@ -41,7 +41,7 @@ export class DailyQuestionsService {
       });
 
       if (!topic) {
-        throw new NotFoundException('A tÃ©makÃ¶r nem talÃ¡lhatÃ³.');
+        throw new NotFoundException('A témakör nem található.');
       }
 
       return topic;

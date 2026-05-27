@@ -56,7 +56,7 @@ export class MailService {
         html: input.html,
         text:
           input.text ??
-          'Az uzenet megtekintesehez hasznaljon HTML-kompatibilis e-mail megjelenitot!',
+          'Az üzenet megtekintéséhez használjon HTML-kompatibilis e-mail megjelenítőt!',
         attachments: input.attachments,
       });
     } catch (error) {
@@ -64,7 +64,7 @@ export class MailService {
         'Email sending failed',
         error instanceof Error ? error.stack : String(error),
       );
-      throw new InternalServerErrorException('Email kuldese sikertelen');
+      throw new InternalServerErrorException('Email küldése sikertelen.');
     }
   }
 
@@ -89,7 +89,7 @@ export class MailService {
       html: input.html,
       text:
         input.text ??
-        'Az uzenet megtekintesehez hasznaljon HTML-kompatibilis e-mail megjelenitot!',
+        'Az üzenet megtekintéséhez használjon HTML-kompatibilis e-mail megjelenítőt!',
       attachments: input.attachments?.length
         ? await this.formatAttachmentsForResend(input.attachments)
         : undefined,
@@ -154,7 +154,7 @@ export class MailService {
     const value = this.config.get<string>(key);
 
     if (!value) {
-      throw new Error(`${key} nincs beallitva a .env-ben`);
+      throw new Error(`${key} nincs beállítva a .env-ben`);
     }
 
     return value;

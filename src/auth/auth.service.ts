@@ -31,7 +31,7 @@ export class AuthService {
 
     if (existing) {
       throw new BadRequestException(
-        'Ezzel az emaillel mar letezik felhasznalo ebben a szervezetben.',
+        'Ezzel az emaillel már létezik felhasználó ebben a szervezetben.',
       );
     }
 
@@ -79,7 +79,7 @@ export class AuthService {
         metadata: { email: input.email, reason: !user ? 'not_found' : 'deleted' },
         request: this.activity.requestMeta(req),
       });
-      throw new UnauthorizedException('Hibas email vagy jelszo.');
+      throw new UnauthorizedException('Hibás email vagy jelszó.');
     }
 
     const ok = await bcrypt.compare(input.password, user.passwordHash);
@@ -95,7 +95,7 @@ export class AuthService {
         metadata: { email: input.email, reason: 'bad_password' },
         request: this.activity.requestMeta(req),
       });
-      throw new UnauthorizedException('Hibas email vagy jelszo.');
+      throw new UnauthorizedException('Hibás email vagy jelszó.');
     }
 
     await this.activity.log({
@@ -134,7 +134,7 @@ export class AuthService {
           request: this.activity.requestMeta(req),
         });
       }
-      throw new UnauthorizedException('Hibas email vagy jelszo.');
+      throw new UnauthorizedException('Hibás email vagy jelszó.');
     }
 
     const ok = await bcrypt.compare(input.password, user.passwordHash);
@@ -150,7 +150,7 @@ export class AuthService {
         metadata: { email: input.email, reason: 'bad_password', global: true },
         request: this.activity.requestMeta(req),
       });
-      throw new UnauthorizedException('Hibas email vagy jelszo.');
+      throw new UnauthorizedException('Hibás email vagy jelszó.');
     }
 
     await this.activity.log({
