@@ -410,6 +410,106 @@ const PSYCHOSOCIAL_QUESTIONS: SeedQuestion[] = [
   },
 ];
 
+const CONTENT_SURFACES = [
+  {
+    id: 'surface_leadership_self',
+    key: 'leadership_self',
+    name: 'Sajat vezetoi fejlodes',
+    description: 'LeadershipSelfFlow appos tartalmai',
+  },
+];
+
+const CONTENT_TOPICS = [
+  { id: 'topic_inspiration', slug: 'inspiracio', name: 'Inspiracio' },
+  { id: 'topic_trust', slug: 'bizalom', name: 'Bizalom' },
+  { id: 'topic_reading', slug: 'olvasas', name: 'Olvasas' },
+  { id: 'topic_self_development', slug: 'onfejlesztes', name: 'Onfejlesztes' },
+  { id: 'topic_motivation', slug: 'motivacio', name: 'Motivacio' },
+];
+
+const CONTENT_ITEMS = [
+  {
+    id: 'content_ted1',
+    surfaceKey: 'leadership_self',
+    topicSlug: 'inspiracio',
+    title: 'How Great Leaders Inspire Action',
+    description: 'Simon Sinek klasszikus TED eloadasa a Why erejerol.',
+    type: 'video',
+    duration: 18,
+    url: 'https://www.ted.com/talks/simon_sinek_how_great_leaders_inspire_action?language=hu',
+    source: 'TED',
+    thumbnail:
+      'https://pi.tedcdn.com/r/talkstar-photos.s3.amazonaws.com/uploads/3e7d6d3b-5e2f-4e9c-9f4c-bfe38e4a0d5f/SimonSinek_2009-embed.jpg',
+    sortOrder: 10,
+  },
+  {
+    id: 'content_ted2',
+    surfaceKey: 'leadership_self',
+    topicSlug: 'bizalom',
+    title: 'Why Good Leaders Make You Feel Safe',
+    description: 'A biztonsagerzet es vezetes kapcsolata.',
+    type: 'video',
+    duration: 15,
+    url: 'https://www.ted.com/talks/simon_sinek_why_good_leaders_make_you_feel_safe',
+    source: 'TED',
+    thumbnail:
+      'https://pi.tedcdn.com/r/talkstar-photos.s3.amazonaws.com/uploads/4e6e0a6c-9c66-4e35-8c1e-b9c97f1b1c8d/SimonSinek_2014-embed.jpg',
+    sortOrder: 20,
+  },
+  {
+    id: 'content_yt1',
+    surfaceKey: 'leadership_self',
+    topicSlug: 'inspiracio',
+    title: 'TED Talk - Leadership insight',
+    description: 'Inspiralo vezetoi gondolatok video formaban.',
+    type: 'video',
+    duration: 12,
+    url: 'https://www.youtube.com/watch?v=5aH2Ppjpcho',
+    source: 'YouTube',
+    thumbnail: 'https://img.youtube.com/vi/5aH2Ppjpcho/hqdefault.jpg',
+    sortOrder: 30,
+  },
+  {
+    id: 'content_blog1',
+    surfaceKey: 'leadership_self',
+    topicSlug: 'olvasas',
+    title: 'Top 10 Leadership Blogs',
+    description: 'Valogatott vezetoi blogok egy helyen.',
+    type: 'article',
+    duration: 8,
+    url: 'https://getlucidity.com/strategy-resources/the-top-10-leadership-blogs-every-leader-should-read/',
+    source: 'Lucidity',
+    thumbnail: null,
+    sortOrder: 40,
+  },
+  {
+    id: 'content_blog2',
+    surfaceKey: 'leadership_self',
+    topicSlug: 'onfejlesztes',
+    title: 'Tudatos Vezetes Blog',
+    description: 'Magyar nyelvu vezeteseleti gondolatok.',
+    type: 'article',
+    duration: 6,
+    url: 'https://tudatosvezetes.blogspot.com/',
+    source: 'Blogspot',
+    thumbnail: null,
+    sortOrder: 50,
+  },
+  {
+    id: 'content_yt2',
+    surfaceKey: 'leadership_self',
+    topicSlug: 'motivacio',
+    title: 'Leadership Video',
+    description: 'Gyakorlati vezetoi tanulsagok.',
+    type: 'video',
+    duration: 10,
+    url: 'https://www.youtube.com/watch?v=5Bg3xu2vA2k',
+    source: 'YouTube',
+    thumbnail: 'https://img.youtube.com/vi/5Bg3xu2vA2k/hqdefault.jpg',
+    sortOrder: 60,
+  },
+];
+
 async function main() {
   const platformAdminEmail = 'superadmin@fempy.hu';
   const platformAdminPasswordPlain = 'superpass123';
@@ -432,6 +532,7 @@ async function main() {
   });
 
   await seedPsychosocialCampaign();
+  await seedContentLibrary();
 
   console.log('Seed kész:', {
     platformAdmin: {
@@ -461,9 +562,6 @@ async function resetApplicationData() {
   await prisma.dailyQuestionSchedule.deleteMany({});
   await prisma.dailyQuestion.deleteMany({});
   await prisma.dailyQuestionTopic.deleteMany({});
-  await prisma.contentItem.deleteMany({});
-  await prisma.contentTopic.deleteMany({});
-  await prisma.contentSurface.deleteMany({});
   await prisma.userProfile.deleteMany({});
   await prisma.user.deleteMany({});
   await prisma.position.deleteMany({});
@@ -518,6 +616,93 @@ async function seedPsychosocialCampaign() {
         isActive: true,
         pushTitle: 'Megérkezett a napi kérdőíved',
         pushBody: `Töltsd ki a(z) ${item.topic} témakör kérdéseit.`,
+      },
+    });
+  }
+}
+
+async function seedContentLibrary() {
+  const surfaceByKey = new Map<string, string>();
+  const topicBySlug = new Map<string, string>();
+
+  for (const surface of CONTENT_SURFACES) {
+    const savedSurface = await prisma.contentSurface.upsert({
+      where: { key: surface.key },
+      update: {
+        name: surface.name,
+        description: surface.description,
+        isActive: true,
+      },
+      create: {
+        id: surface.id,
+        key: surface.key,
+        name: surface.name,
+        description: surface.description,
+        isActive: true,
+      },
+      select: { id: true, key: true },
+    });
+
+    surfaceByKey.set(savedSurface.key, savedSurface.id);
+  }
+
+  for (const topic of CONTENT_TOPICS) {
+    const savedTopic = await prisma.contentTopic.upsert({
+      where: { slug: topic.slug },
+      update: {
+        name: topic.name,
+        isActive: true,
+      },
+      create: {
+        id: topic.id,
+        slug: topic.slug,
+        name: topic.name,
+        isActive: true,
+      },
+      select: { id: true, slug: true },
+    });
+
+    topicBySlug.set(savedTopic.slug, savedTopic.id);
+  }
+
+  for (const item of CONTENT_ITEMS) {
+    const surfaceId = surfaceByKey.get(item.surfaceKey);
+    const topicId = topicBySlug.get(item.topicSlug);
+
+    if (!surfaceId || !topicId) {
+      throw new Error(`Missing content relation for ${item.id}`);
+    }
+
+    await prisma.contentItem.upsert({
+      where: { id: item.id },
+      update: {
+        surfaceId,
+        topicId,
+        title: item.title,
+        description: item.description,
+        type: item.type,
+        duration: item.duration,
+        url: item.url,
+        source: item.source,
+        thumbnail: item.thumbnail,
+        status: 'published',
+        language: 'hu',
+        sortOrder: item.sortOrder,
+      },
+      create: {
+        id: item.id,
+        surfaceId,
+        topicId,
+        title: item.title,
+        description: item.description,
+        type: item.type,
+        duration: item.duration,
+        url: item.url,
+        source: item.source,
+        thumbnail: item.thumbnail,
+        status: 'published',
+        language: 'hu',
+        sortOrder: item.sortOrder,
       },
     });
   }

@@ -18,6 +18,13 @@ type ContentItemInput = {
   sortOrder?: number;
 };
 
+type ContentTopicInput = {
+  name?: string;
+  slug?: string;
+  description?: string | null;
+  isActive?: boolean;
+};
+
 @Injectable()
 export class ContentService {
   constructor(private readonly prisma: PrismaService) {}
@@ -53,6 +60,54 @@ export class ContentService {
       orderBy: { name: 'asc' },
       include: { _count: { select: { items: true } } },
     });
+  }
+
+  async createTopic(input: ContentTopicInput) {
+    const name = input.name?.trim();
+    if (!name) throw new BadRequestException('Missing content topic name.');
+
+    const slug = input.slug?.trim().toLowerCase() || this.slugify(name);
+
+    return this.prisma.contentTopic.upsert({
+      where: { slug },
+      update: {
+        name,
+        description: input.description?.trim() || null,
+        isActive: input.isActive ?? true,
+      },
+      create: {
+        slug,
+        name,
+        description: input.description?.trim() || null,
+        isActive: input.isActive ?? true,
+      },
+      include: { _count: { select: { items: true } } },
+    });
+  }
+
+  async updateTopic(id: string, input: ContentTopicInput) {
+    const existing = await this.prisma.contentTopic.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Content topic not found.');
+
+    const name = input.name?.trim();
+    const slug = input.slug?.trim().toLowerCase();
+
+    return this.prisma.contentTopic.update({
+      where: { id },
+      data: {
+        ...(name ? { name } : {}),
+        ...(slug ? { slug } : {}),
+        ...(input.description !== undefined
+          ? { description: input.description?.trim() || null }
+          : {}),
+        ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
+      },
+      include: { _count: { select: { items: true } } },
+    });
+  }
+
+  async archiveTopic(id: string) {
+    return this.updateTopic(id, { isActive: false });
   }
 
   async listAll(query?: { surfaceKey?: string; status?: string; type?: string; topicId?: string }) {
@@ -95,8 +150,7 @@ export class ContentService {
   async deleteItem(id: string) {
     const existing = await this.prisma.contentItem.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Content item not found.');
-    await this.prisma.contentItem.delete({ where: { id } });
-    return { ok: true };
+    return this.updateStatus(id, 'archived');
   }
 
   private async updateStatus(id: string, status: string) {
@@ -162,8 +216,8 @@ export class ContentService {
     const topicSlug = slug || this.slugify(name ?? '');
     const topic = await this.prisma.contentTopic.upsert({
       where: { slug: topicSlug },
-      update: { ...(name ? { name } : {}) },
-      create: { slug: topicSlug, name: name || topicSlug },
+      update: { ...(name ? { name } : {}), isActive: true },
+      create: { slug: topicSlug, name: name || topicSlug, isActive: true },
     });
 
     return topic.id;

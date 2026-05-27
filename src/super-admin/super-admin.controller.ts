@@ -226,6 +226,24 @@ export class SuperAdminController {
   }
 
   @UseGuards(SuperAdminGuard)
+  @Post('content/topics')
+  createContentTopic(@Body() body: any) {
+    return this.service.createContentTopic(body);
+  }
+
+  @UseGuards(SuperAdminGuard)
+  @Patch('content/topics/:id')
+  updateContentTopic(@Param('id') id: string, @Body() body: any) {
+    return this.service.updateContentTopic(id, body);
+  }
+
+  @UseGuards(SuperAdminGuard)
+  @Patch('content/topics/:id/archive')
+  archiveContentTopic(@Param('id') id: string) {
+    return this.service.archiveContentTopic(id);
+  }
+
+  @UseGuards(SuperAdminGuard)
   @Get('content/items')
   listContentItems(@Query() query: any) {
     return this.service.listContentItems(query);

@@ -1215,6 +1215,18 @@ Fempy csapata`,
     return this.content.listTopics();
   }
 
+  createContentTopic(input: any) {
+    return this.content.createTopic(input);
+  }
+
+  updateContentTopic(id: string, input: any) {
+    return this.content.updateTopic(id, input);
+  }
+
+  archiveContentTopic(id: string) {
+    return this.content.archiveTopic(id);
+  }
+
   listContentItems(query: any) {
     return this.content.listAll(query);
   }

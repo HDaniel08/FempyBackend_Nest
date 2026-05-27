@@ -15,7 +15,11 @@ import { ExpoPushService } from './expo-push.service';
     BullModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
-        const redisUrl = config.get<string>('REDIS_URL');
+        const redisUrl =
+          config.get<string>('REDIS_URL') ||
+          config.get<string>('REDIS_PRIVATE_URL') ||
+          config.get<string>('REDIS_PUBLIC_URL') ||
+          config.get<string>('REDIS_TLS_URL');
 
         if (redisUrl) {
           const url = new URL(redisUrl);
@@ -27,8 +31,14 @@ import { ExpoPushService } from './expo-push.service';
             connection: {
               host: url.hostname,
               port: Number(url.port || 6379),
-              username: decodeURIComponent(url.username || 'default'),
-              password: decodeURIComponent(url.password),
+              username:
+                decodeURIComponent(url.username) ||
+                config.get<string>('REDIS_USERNAME') ||
+                undefined,
+              password:
+                decodeURIComponent(url.password) ||
+                config.get<string>('REDIS_PASSWORD') ||
+                undefined,
               tls: tlsEnabled ? {} : undefined,
             },
           };
