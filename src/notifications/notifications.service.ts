@@ -102,6 +102,47 @@ export class NotificationsService {
     return record;
   }
 
+  async scheduleBullmqHealthCheck(input: {
+    tenantId: string;
+    delayMs?: number;
+    requestedBy?: string | null;
+  }) {
+    const delayMs = Math.max(0, Math.min(Number(input.delayMs ?? 5000), 60000));
+    const scheduledFor = new Date(Date.now() + delayMs);
+    const record = await this.prisma.notificationJob.create({
+      data: {
+        tenantId: input.tenantId,
+        userId: null,
+        type: 'bullmq_health_check',
+        payload: {
+          requestedBy: input.requestedBy ?? null,
+          delayMs,
+          enqueuedAt: new Date().toISOString(),
+        },
+        scheduledFor,
+        status: 'queued',
+      },
+    });
+
+    await this.queue.add(
+      'health-check',
+      {
+        notificationJobId: record.id,
+        tenantId: input.tenantId,
+        requestedBy: input.requestedBy ?? null,
+        enqueuedAt: new Date().toISOString(),
+      },
+      {
+        delay: delayMs,
+        attempts: 1,
+        removeOnComplete: true,
+        removeOnFail: false,
+      },
+    );
+
+    return record;
+  }
+
   async sendDirectNow(input: {
     tenantId: string;
     userId: string;

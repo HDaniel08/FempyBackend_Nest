@@ -220,6 +220,18 @@ export class SuperAdminController {
   }
 
   @UseGuards(SuperAdminGuard)
+  @Post('redis/bullmq-test')
+  triggerBullmqTest(@Body() body: { delayMs?: number }, @Req() req: any) {
+    return this.service.triggerBullmqTest(body ?? {}, req.platformAdmin);
+  }
+
+  @UseGuards(SuperAdminGuard)
+  @Get('redis/bullmq-test/:jobId')
+  getBullmqTestStatus(@Param('jobId') jobId: string) {
+    return this.service.getBullmqTestStatus(jobId);
+  }
+
+  @UseGuards(SuperAdminGuard)
   @Get('content/surfaces')
   listContentSurfaces() {
     return this.service.listContentSurfaces();

@@ -19,6 +19,26 @@ export class NotificationsProcessor extends WorkerHost {
     this.logger.log(`Job érkezett: id=${job.id} name=${job.name}`);
     this.logger.log(`Job data: ${JSON.stringify(job.data)}`);
 
+    if (job.name === 'health-check') {
+      const { notificationJobId, enqueuedAt, requestedBy } = job.data;
+      await this.prisma.notificationJob.update({
+        where: { id: notificationJobId },
+        data: {
+          status: 'sent',
+          payload: {
+            kind: 'bullmq_health_check',
+            requestedBy: requestedBy ?? null,
+            enqueuedAt: enqueuedAt ?? null,
+            processedAt: new Date().toISOString(),
+            workerJobId: String(job.id),
+          },
+          processedAt: new Date(),
+        },
+      });
+
+      return { ok: true, notificationJobId };
+    }
+
     const { tenantId, userId, payload, notificationJobId } = job.data;
 
     const devices = await this.prisma.userDevice.findMany({

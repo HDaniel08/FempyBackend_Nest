@@ -1363,7 +1363,7 @@ Fempy csapata`,
     const jobs: any[] = [];
     for (const user of users) {
       jobs.push(
-        await this.notifications.sendDirectNow({
+        await this.notifications.sendNow({
           tenantId: user.tenantId,
           userId: user.id,
           type: 'platform_push',
@@ -1397,6 +1397,42 @@ Fempy csapata`,
     }
 
     return { targetedUsers: users.length, queuedJobs: jobs.length };
+  }
+
+  async triggerBullmqTest(input: { delayMs?: number }, actor?: any) {
+    const tenant = await this.prisma.tenant.findFirst({
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, name: true },
+    });
+
+    if (!tenant) {
+      throw new BadRequestException('BullMQ teszthez legalább egy tenant szükséges.');
+    }
+
+    const job = await this.notifications.scheduleBullmqHealthCheck({
+      tenantId: tenant.id,
+      delayMs: input.delayMs,
+      requestedBy: actor?.sub ?? actor?.email ?? null,
+    });
+
+    return { tenant, job };
+  }
+
+  async getBullmqTestStatus(jobId: string) {
+    return this.prisma.notificationJob.findUnique({
+      where: { id: jobId },
+      select: {
+        id: true,
+        tenantId: true,
+        type: true,
+        status: true,
+        errorMessage: true,
+        payload: true,
+        scheduledFor: true,
+        createdAt: true,
+        processedAt: true,
+      },
+    });
   }
 
   private async resolvePushUsers(filters: PushFilters) {
