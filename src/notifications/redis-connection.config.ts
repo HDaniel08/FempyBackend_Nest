@@ -62,11 +62,24 @@ export function buildRedisConnectionOptions(
   }
 
   return {
-    host: config.get<string>('REDIS_HOST') ?? 'localhost',
-    port: Number(config.get<string>('REDIS_PORT') ?? 6379),
+    host:
+      config.get<string>('REDIS_HOST') ??
+      config.get<string>('REDISHOST') ??
+      'localhost',
+    port: Number(
+      config.get<string>('REDIS_PORT') ??
+        config.get<string>('REDISPORT') ??
+        6379,
+    ),
     family: Number(config.get<string>('REDIS_FAMILY') ?? 0),
-    username: config.get<string>('REDIS_USERNAME') || undefined,
-    password: config.get<string>('REDIS_PASSWORD') || undefined,
+    username:
+      config.get<string>('REDIS_USERNAME') ||
+      config.get<string>('REDISUSER') ||
+      undefined,
+    password:
+      config.get<string>('REDIS_PASSWORD') ||
+      config.get<string>('REDISPASSWORD') ||
+      undefined,
     tls: config.get<string>('REDIS_TLS') === 'true' ? {} : undefined,
     connectTimeout,
     maxRetriesPerRequest: null,
@@ -81,7 +94,7 @@ export function describeRedisConnection(
   const source = getRedisEnvSource(config);
 
   return {
-    source: source?.key ?? 'REDIS_HOST/REDIS_PORT',
+    source: source?.key ?? 'REDIS_HOST/REDISHOST',
     host: connection.host,
     port: connection.port,
     family: connection.family,
