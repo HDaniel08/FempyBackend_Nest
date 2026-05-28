@@ -18,6 +18,11 @@ import { ActivityMaintenanceService } from '../activity/activity-maintenance.ser
 import { ContentService } from '../content/content.service';
 import { UsageService } from '../usage/usage.service';
 import { MailService } from '../mail/mail.service';
+import Redis from 'ioredis';
+import {
+  buildRedisConnectionOptions,
+  describeRedisConnection,
+} from '../notifications/redis-connection.config';
 
 type PushFilters = {
   tenantId?: string;
@@ -1206,6 +1211,43 @@ Fempy csapata`,
     systemDays?: number;
   }) {
     return this.activityMaintenance.cleanup(input);
+  }
+
+  async getRedisHealth() {
+    const connection = buildRedisConnectionOptions(this.config);
+    const startedAt = Date.now();
+    const redis = new Redis({
+      ...connection,
+      lazyConnect: true,
+      retryStrategy: () => null,
+    });
+
+    try {
+      await redis.connect();
+      const pong = await redis.ping();
+      return {
+        ok: pong === 'PONG',
+        pong,
+        durationMs: Date.now() - startedAt,
+        connection: describeRedisConnection(this.config, connection),
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        durationMs: Date.now() - startedAt,
+        connection: describeRedisConnection(this.config, connection),
+        error:
+          error instanceof Error
+            ? {
+                name: error.name,
+                message: error.message,
+                code: (error as any).code,
+              }
+            : { message: String(error) },
+      };
+    } finally {
+      redis.disconnect();
+    }
   }
 
   listContentSurfaces() {

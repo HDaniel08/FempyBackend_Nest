@@ -214,6 +214,12 @@ export class SuperAdminController {
   }
 
   @UseGuards(SuperAdminGuard)
+  @Get('redis/health')
+  getRedisHealth() {
+    return this.service.getRedisHealth();
+  }
+
+  @UseGuards(SuperAdminGuard)
   @Get('content/surfaces')
   listContentSurfaces() {
     return this.service.listContentSurfaces();
