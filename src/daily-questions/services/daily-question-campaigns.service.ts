@@ -5,12 +5,14 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DailyQuestionDispatchService } from './daily-question-dispatch.service';
+import { WorkScheduleService } from '../../work-schedule/work-schedule.service';
 
 @Injectable()
 export class DailyQuestionCampaignsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly dispatchService: DailyQuestionDispatchService,
+    private readonly workSchedule: WorkScheduleService,
   ) {}
 
   async listCampaigns() {
@@ -150,11 +152,20 @@ export class DailyQuestionCampaignsService {
       },
     });
 
-    const result = await this.processRunDay(
-      run.id,
-      1,
-      input.triggeredByUserId ?? null,
-    );
+    const workStatus = await this.workSchedule.getStatus(tenant.id);
+    const result = workStatus.allowed
+      ? await this.processRunDay(
+          run.id,
+          1,
+          input.triggeredByUserId ?? null,
+          new Date(),
+        )
+      : {
+          status: 'waiting_for_work_time',
+          dispatched: 0,
+          recipients: 0,
+          nextRunAt: workStatus.nextStart,
+        };
 
     return {
       run,
@@ -171,9 +182,19 @@ export class DailyQuestionCampaignsService {
 
     const results: any[] = [];
     for (const run of runs) {
-      const day = this.getCampaignDay(run.startedAt, now);
-      if (run.lastProcessedDay && run.lastProcessedDay >= day) continue;
-      results.push(await this.processRunDay(run.id, day, null));
+      const workStatus = await this.workSchedule.getStatus(run.tenantId, now);
+      if (!workStatus.allowed) continue;
+
+      if (
+        run.lastProcessedAt &&
+        this.getDateKey(run.lastProcessedAt, workStatus.timeZone) ===
+          workStatus.dateKey
+      ) {
+        continue;
+      }
+
+      const day = (run.lastProcessedDay ?? 0) + 1;
+      results.push(await this.processRunDay(run.id, day, null, now));
     }
 
     return results;
@@ -183,6 +204,7 @@ export class DailyQuestionCampaignsService {
     runId: string,
     campaignDay: number,
     triggeredByUserId?: string | null,
+    now = new Date(),
   ) {
     const run = await this.prisma.dailyQuestionCampaignRun.findUnique({
       where: { id: runId },
@@ -228,7 +250,7 @@ export class DailyQuestionCampaignsService {
         await this.dispatchService.triggerScheduleForTenant({
           tenantId: run.tenantId,
           scheduleId: schedule.id,
-          sentOn: new Date(),
+          sentOn: now,
           triggeredByUserId,
         }),
       );
@@ -238,7 +260,7 @@ export class DailyQuestionCampaignsService {
       where: { id: run.id },
       data: {
         lastProcessedDay: campaignDay,
-        lastProcessedAt: new Date(),
+        lastProcessedAt: now,
       },
     });
 
@@ -256,18 +278,9 @@ export class DailyQuestionCampaignsService {
     };
   }
 
-  private getCampaignDay(startedAt: Date, now: Date) {
-    const start = this.dateKeyToUtcDay(this.getBudapestDateKey(startedAt));
-    const current = this.dateKeyToUtcDay(this.getBudapestDateKey(now));
-    return Math.max(
-      1,
-      Math.floor((current.getTime() - start.getTime()) / 86400000) + 1,
-    );
-  }
-
-  private getBudapestDateKey(date: Date) {
+  private getDateKey(date: Date, timeZone: string) {
     const parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Europe/Budapest',
+      timeZone,
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
@@ -277,10 +290,5 @@ export class DailyQuestionCampaignsService {
     const month = parts.find((part) => part.type === 'month')?.value;
     const day = parts.find((part) => part.type === 'day')?.value;
     return `${year}-${month}-${day}`;
-  }
-
-  private dateKeyToUtcDay(key: string) {
-    const [year, month, day] = key.split('-').map(Number);
-    return new Date(Date.UTC(year, month - 1, day));
   }
 }

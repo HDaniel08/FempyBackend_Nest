@@ -81,6 +81,9 @@ export class DailyQuestionAnswerService {
     }
 
     if (answerRecord.filledAt) {
+      if (answerRecord.answer === dto.answer) {
+        return answerRecord;
+      }
       throw new BadRequestException('Ez a kérdőív már ki lett töltve.');
     }
 

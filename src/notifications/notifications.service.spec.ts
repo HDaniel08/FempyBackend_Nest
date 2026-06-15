@@ -2,6 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getQueueToken } from '@nestjs/bullmq';
 import { NotificationsService } from './notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { ExpoPushService } from './expo-push.service';
+import { WorkScheduleService } from '../work-schedule/work-schedule.service';
 
 describe('NotificationsService', () => {
   let service: NotificationsService;
@@ -11,6 +13,8 @@ describe('NotificationsService', () => {
       providers: [
         NotificationsService,
         { provide: PrismaService, useValue: {} },
+        { provide: ExpoPushService, useValue: {} },
+        { provide: WorkScheduleService, useValue: {} },
         { provide: getQueueToken('notifications'), useValue: {} },
       ],
     }).compile();

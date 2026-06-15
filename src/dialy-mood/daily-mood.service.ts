@@ -208,12 +208,15 @@ private getCtxIds(userCtx: any) {
 
     const existing = await this.prisma.dailyMood.findUnique({
       where: { tenantId_userId_date: { tenantId, userId, date } },
-      select: { id: true },
     });
 
     if (!existing) {
       // csak akkor lehet kommentelni, ha már van napi kedv
       throw new BadRequestException("Nincs még rögzített napi kedv ehhez a naphoz.");
+    }
+
+    if (existing.comment === dto.comment) {
+      return existing;
     }
 
     const mood = await this.prisma.dailyMood.update({

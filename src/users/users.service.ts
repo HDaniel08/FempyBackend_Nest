@@ -14,6 +14,7 @@ import * as bcrypt from 'bcrypt';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { MailService } from '../mail/mail.service';
+import { randomInt } from 'crypto';
 /**
  * UsersService
  * - userCtx: a JWT-bÅ‘l jÃ¶n (sub, tenantId, email, isLeader...)
@@ -47,9 +48,58 @@ export class UsersService {
   }
   findByEmailGlobal(email: string) {
     return this.prisma.user.findFirst({
-      where: { email, isDeleted: false },
+      where: {
+        email: { equals: email, mode: 'insensitive' },
+        isDeleted: false,
+      },
       include: { tenant: true },
     });
+  }
+
+  async resetForgottenPassword(user: {
+    id: string;
+    tenantId: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    passwordHash: string;
+    mustChangePassword: boolean;
+    tenant: { name: string };
+  }) {
+    const temporaryPassword = this.generateTemporaryPassword();
+    const passwordHash = await bcrypt.hash(temporaryPassword, 10);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash,
+        mustChangePassword: true,
+      },
+    });
+
+    try {
+      await this.sendPasswordResetEmail({
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        password: temporaryPassword,
+        tenantName: user.tenant.name,
+      });
+      return true;
+    } catch (error) {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          passwordHash: user.passwordHash,
+          mustChangePassword: user.mustChangePassword,
+        },
+      });
+      this.logger.error(
+        'Password reset email sending failed',
+        error instanceof Error ? error.stack : String(error),
+      );
+      return false;
+    }
   }
 
   /**
@@ -573,7 +623,10 @@ export class UsersService {
     }
 
     if (!user.mustChangePassword) {
-      const ok = await bcrypt.compare(input.currentPassword ?? '', user.passwordHash);
+      const ok = await bcrypt.compare(
+        input.currentPassword ?? '',
+        user.passwordHash,
+      );
       if (!ok) {
         throw new BadRequestException('A jelenlegi jelszó nem megfelelő.');
       }
@@ -581,7 +634,9 @@ export class UsersService {
 
     const same = await bcrypt.compare(newPassword, user.passwordHash);
     if (same) {
-      throw new BadRequestException('Az új jelszó nem egyezhet meg a jelenlegivel.');
+      throw new BadRequestException(
+        'Az új jelszó nem egyezhet meg a jelenlegivel.',
+      );
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
@@ -808,6 +863,122 @@ export class UsersService {
         error instanceof Error ? error.stack : String(error),
       );
     }
+  }
+
+  private generateTemporaryPassword() {
+    const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const lower = 'abcdefghijkmnopqrstuvwxyz';
+    const digits = '23456789';
+    const all = `${upper}${lower}${digits}`;
+    const characters = [
+      upper[randomInt(upper.length)],
+      lower[randomInt(lower.length)],
+      digits[randomInt(digits.length)],
+    ];
+
+    while (characters.length < 8) {
+      characters.push(all[randomInt(all.length)]);
+    }
+
+    for (let index = characters.length - 1; index > 0; index -= 1) {
+      const swapIndex = randomInt(index + 1);
+      [characters[index], characters[swapIndex]] = [
+        characters[swapIndex],
+        characters[index],
+      ];
+    }
+
+    return characters.join('');
+  }
+
+  private async sendPasswordResetEmail(input: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    password: string;
+    tenantName: string;
+  }) {
+    const fullName = `${input.lastName} ${input.firstName}`.trim();
+    const logoPath = this.resolveMailLogoPath();
+    const safeName = this.escapeHtml(fullName);
+    const safeEmail = this.escapeHtml(input.email);
+    const safePassword = this.escapeHtml(input.password);
+    const safeTenantName = this.escapeHtml(input.tenantName);
+
+    await this.mail.sendMail({
+      to: { email: input.email, name: fullName },
+      subject: 'Fempy - Új ideiglenes jelszó',
+      html: `
+<!doctype html>
+<html lang="hu">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Fempy ideiglenes jelszó</title>
+  </head>
+  <body style="margin:0;background:#f4f7fb;color:#162033;font-family:Arial,Helvetica,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f7fb;padding:32px 16px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;background:#ffffff;border:1px solid #dde5ef;border-radius:12px;overflow:hidden;">
+            <tr>
+              <td style="padding:26px 34px;border-bottom:1px solid #e8eef5;">
+                ${
+                  logoPath
+                    ? '<img src="cid:fempy-logo" width="190" alt="Fempy App" style="display:block;max-width:190px;height:auto;">'
+                    : '<div style="font-size:24px;font-weight:700;color:#162033;">Fempy</div>'
+                }
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:32px 34px;">
+                <h1 style="margin:0;font-size:24px;line-height:1.3;color:#162033;">Új ideiglenes jelszó</h1>
+                <p style="margin:18px 0 0;font-size:16px;line-height:1.7;color:#27364a;">Kedves ${safeName}!</p>
+                <p style="margin:12px 0 0;font-size:16px;line-height:1.7;color:#27364a;">A(z) ${safeTenantName} szervezethez tartozó Fempy fiókodhoz új ideiglenes jelszót kértél.</p>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:22px;border:1px solid #d9e3ef;border-radius:10px;background:#f8fbff;">
+                  <tr>
+                    <td style="padding:17px 20px;border-bottom:1px solid #d9e3ef;">
+                      <div style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#7b8ba1;font-weight:700;">Email</div>
+                      <div style="margin-top:5px;font-size:16px;color:#162033;font-weight:700;">${safeEmail}</div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:17px 20px;">
+                      <div style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#7b8ba1;font-weight:700;">Ideiglenes jelszó</div>
+                      <div style="margin-top:5px;font-size:18px;color:#162033;font-weight:700;letter-spacing:.08em;">${safePassword}</div>
+                    </td>
+                  </tr>
+                </table>
+                <p style="margin:18px 0 0;font-size:15px;line-height:1.6;color:#607089;">Bejelentkezés után kötelezően meg kell adnod egy új, saját jelszót.</p>
+                <p style="margin:18px 0 0;font-size:14px;line-height:1.6;color:#7b8ba1;">Ha nem te kérted az új jelszót, jelezd a szervezeted adminisztrátorának.</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`,
+      text: `Kedves ${fullName}!
+
+A(z) ${input.tenantName} szervezethez tartozó Fempy fiókodhoz új ideiglenes jelszót kértél.
+
+Email: ${input.email}
+Ideiglenes jelszó: ${input.password}
+
+Bejelentkezés után kötelezően meg kell adnod egy új, saját jelszót.
+
+Ha nem te kérted az új jelszót, jelezd a szervezeted adminisztrátorának.`,
+      attachments: logoPath
+        ? [
+            {
+              filename: 'fempy-logo.png',
+              path: logoPath,
+              cid: 'fempy-logo',
+            },
+          ]
+        : undefined,
+    });
   }
 
   private buildCoworkerWelcomeEmailHtml(input: {

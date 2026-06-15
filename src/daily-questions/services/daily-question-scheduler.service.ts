@@ -10,7 +10,7 @@ export class DailyQuestionSchedulerService {
     private readonly campaignsService: DailyQuestionCampaignsService,
   ) {}
 
-  @Cron('0 9 * * *', { timeZone: 'Europe/Budapest' })
+  @Cron('*/5 * * * *', { timeZone: 'Europe/Budapest' })
   async handleDailyCampaigns() {
     const results = await this.campaignsService.processDueCampaigns();
     if (results.length > 0) {

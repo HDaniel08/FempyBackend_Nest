@@ -9,6 +9,7 @@ import {
   buildRedisConnectionOptions,
   describeRedisConnection,
 } from './redis-connection.config';
+import { WorkScheduleModule } from '../work-schedule/work-schedule.module';
 /**
  * NotificationsModule:
  * - Itt konfiguráljuk a BullMQ queue-t.
@@ -16,6 +17,7 @@ import {
  */
 @Module({
   imports: [
+    WorkScheduleModule,
     BullModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {

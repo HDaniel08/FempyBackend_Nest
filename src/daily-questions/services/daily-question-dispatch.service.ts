@@ -7,6 +7,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { TriggerDailyQuestionDto } from '../dto/trigger-daily-question.dto';
 import { DailyQuestionAudienceService } from './daily-question-audience.service';
 import { DailyQuestionPushService } from './daily-question-push.service';
+import { WorkScheduleService } from '../../work-schedule/work-schedule.service';
 
 @Injectable()
 export class DailyQuestionDispatchService {
@@ -14,6 +15,7 @@ export class DailyQuestionDispatchService {
     private readonly prisma: PrismaService,
     private readonly audienceService: DailyQuestionAudienceService,
     private readonly pushService: DailyQuestionPushService,
+    private readonly workSchedule: WorkScheduleService,
   ) {}
 
   private getCtxIds(userCtx: any) {
@@ -93,6 +95,13 @@ export class DailyQuestionDispatchService {
     triggeredByUserId?: string | null;
   }) {
     const { tenantId, schedule } = input;
+    const workStatus = await this.workSchedule.getStatus(tenantId);
+
+    if (!workStatus.allowed) {
+      throw new BadRequestException(
+        `Kérdőív csak munkaidőben küldhető. Következő lehetséges időpont: ${workStatus.nextStart.toISOString()}`,
+      );
+    }
 
     const targetUsers = await this.audienceService.resolveUsers({
       tenantId,
@@ -162,6 +171,7 @@ export class DailyQuestionDispatchService {
             campaignDay: schedule.campaignDay ?? null,
           },
         },
+        sentOn.toISOString().slice(0, 10),
       );
 
       await this.prisma.dailyQuestionDispatch.update({

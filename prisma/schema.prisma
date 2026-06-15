@@ -557,6 +557,7 @@ model NotificationJob {
   userId   String? @map("user_id")
 
   type         String
+  dedupeKey    String?   @unique @map("dedupe_key")
   payload      Json
   scheduledFor DateTime? @map("scheduled_for")
   status       String    @default("queued")

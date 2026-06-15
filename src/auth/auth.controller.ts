@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post,Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { Tenant } from '../common/tenant/tenant.decorator';
 import { RegisterDto } from './dto/register.dto';
@@ -6,6 +6,7 @@ import { LoginDto } from './dto/login.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { UsersService } from '../users/users.service';
 import { TenantMatchGuard } from './tenant-match.guard';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 /**
  * AuthController:
  * - /auth/register: tenanton belül regisztráció
@@ -20,7 +21,11 @@ export class AuthController {
   ) {}
 
   @Post('register')
-  async register(@Tenant() tenant: any, @Body() body: RegisterDto, @Req() req: any) {
+  async register(
+    @Tenant() tenant: any,
+    @Body() body: RegisterDto,
+    @Req() req: any,
+  ) {
     // tenant.id a middlewareből jön
     return this.auth.register(tenant.id, body, req);
   }
@@ -30,16 +35,21 @@ export class AuthController {
     return this.auth.login(tenant.id, body, req);
   }
   @Post('login-global')
-async loginGlobal(@Body() body: LoginDto, @Req() req: any) {
-  return this.auth.loginGlobal(body, req);
-}
+  async loginGlobal(@Body() body: LoginDto, @Req() req: any) {
+    return this.auth.loginGlobal(body, req);
+  }
+
+  @Post('forgot-password')
+  async forgotPassword(@Body() body: ForgotPasswordDto, @Req() req: any) {
+    return this.auth.forgotPassword(body.email, req);
+  }
 
   /**
    * /auth/me:
    * - Bearer token kell hozzá
    * - visszaadjuk a bejelentkezett user részletes adatait tenanton belül
    */
-@UseGuards(JwtAuthGuard, TenantMatchGuard)
+  @UseGuards(JwtAuthGuard, TenantMatchGuard)
   @Get('me')
   async me(@Tenant() tenant: any, @Req() req: any) {
     const user = req.user;

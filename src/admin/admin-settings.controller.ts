@@ -43,6 +43,7 @@ export class AdminSettingsController {
       notifyEmail?: boolean;
       notifyPush?: boolean;
       notifyWorkdayOnly?: boolean;
+      workDays?: unknown;
 
       defaultLang?: string;
       themeMode?: string;

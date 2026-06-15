@@ -11,6 +11,9 @@ import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class AuthService {
+  private readonly passwordResetCooldowns = new Map<string, number>();
+  private readonly passwordResetCooldownMs = 15 * 60 * 1000;
+
   constructor(
     private users: UsersService,
     private jwt: JwtService,
@@ -65,7 +68,11 @@ export class AuthService {
     });
   }
 
-  async login(tenantId: string, input: { email: string; password: string }, req?: any) {
+  async login(
+    tenantId: string,
+    input: { email: string; password: string },
+    req?: any,
+  ) {
     const user = await this.users.findByEmail(tenantId, input.email);
 
     if (!user || user.isDeleted) {
@@ -76,7 +83,10 @@ export class AuthService {
         source: 'auth',
         entityType: user ? 'USER' : null,
         entityId: user?.id ?? null,
-        metadata: { email: input.email, reason: !user ? 'not_found' : 'deleted' },
+        metadata: {
+          email: input.email,
+          reason: !user ? 'not_found' : 'deleted',
+        },
         request: this.activity.requestMeta(req),
       });
       throw new UnauthorizedException('Hibás email vagy jelszó.');
@@ -189,6 +199,44 @@ export class AuthService {
         name: user.tenant.name,
         appAccessEnabled: user.tenant.appAccessEnabled,
       },
+    };
+  }
+
+  async forgotPassword(email: string, req?: any) {
+    const normalizedEmail = email.trim().toLowerCase();
+    const now = Date.now();
+    const cooldownUntil = this.passwordResetCooldowns.get(normalizedEmail) ?? 0;
+
+    if (cooldownUntil <= now) {
+      const user = await this.users.findByEmailGlobal(normalizedEmail);
+
+      if (user && !user.isDeleted) {
+        this.passwordResetCooldowns.set(
+          normalizedEmail,
+          now + this.passwordResetCooldownMs,
+        );
+
+        const sent = await this.users.resetForgottenPassword(user);
+        if (!sent) {
+          this.passwordResetCooldowns.delete(normalizedEmail);
+        } else {
+          await this.activity.log({
+            tenantId: user.tenantId,
+            userId: user.id,
+            event: 'AUTH_PASSWORD_RESET_REQUESTED',
+            source: 'auth',
+            entityType: 'USER',
+            entityId: user.id,
+            metadata: { email: normalizedEmail },
+            request: this.activity.requestMeta(req),
+          });
+        }
+      }
+    }
+
+    return {
+      message:
+        'Ha az email címhez tartozik aktív fiók, elküldtük az ideiglenes jelszót.',
     };
   }
 

@@ -20,6 +20,7 @@ import { SuperAdminModule } from './super-admin/super-admin.module';
 import { ContentModule } from './content/content.module';
 import { UsageModule } from './usage/usage.module';
 import { MailModule } from './mail/mail.module';
+import { RemindersModule } from './reminders/reminders.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { MailModule } from './mail/mail.module';
     ContentModule,
     UsageModule,
     MailModule,
+    RemindersModule,
 
     ServeStaticModule.forRoot({
       rootPath: join(process.cwd(), 'uploads'),

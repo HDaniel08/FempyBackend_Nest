@@ -14,9 +14,15 @@ import { DailyQuestionTopicReportService } from './services/daily-question-topic
 import { DailyQuestionCampaignsService } from './services/daily-question-campaigns.service';
 import { ActivityModule } from '../activity/activity.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { WorkScheduleModule } from '../work-schedule/work-schedule.module';
 
 @Module({
-  imports: [ActivityModule, NotificationsModule, ScheduleModule.forRoot()],
+  imports: [
+    ActivityModule,
+    NotificationsModule,
+    WorkScheduleModule,
+    ScheduleModule.forRoot(),
+  ],
   controllers: [DailyQuestionsAdminController, DailyQuestionsUserController],
   providers: [
     PrismaService,

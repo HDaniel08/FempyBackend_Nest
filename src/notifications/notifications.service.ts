@@ -3,6 +3,8 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { ExpoPushService } from './expo-push.service';
+import { Prisma } from '@prisma/client';
+import { WorkScheduleService } from '../work-schedule/work-schedule.service';
 
 /**
  * NotificationsService:
@@ -15,6 +17,7 @@ export class NotificationsService {
   constructor(
     private prisma: PrismaService,
     private expoPush: ExpoPushService,
+    private readonly workSchedule: WorkScheduleService,
 
     // Ezzel kapjuk meg a "notifications" queue-t
     @InjectQueue('notifications') private queue: Queue,
@@ -31,6 +34,10 @@ export class NotificationsService {
     payload: any;
     scheduledFor: Date;
   }) {
+    const scheduledFor = await this.workSchedule.nextAllowedAt(
+      input.tenantId,
+      input.scheduledFor,
+    );
     // 1) DB log rekord
     const record = await this.prisma.notificationJob.create({
       data: {
@@ -38,13 +45,13 @@ export class NotificationsService {
         userId: input.userId,
         type: input.type,
         payload: input.payload,
-        scheduledFor: input.scheduledFor,
+        scheduledFor,
         status: 'queued',
       },
     });
 
     // 2) Kiszámoljuk a delay-t (ms)
-    const delayMs = Math.max(0, input.scheduledFor.getTime() - Date.now());
+    const delayMs = Math.max(0, scheduledFor.getTime() - Date.now());
 
     // 3) BullMQ job hozzáadás
     await this.queue.add(
@@ -57,8 +64,8 @@ export class NotificationsService {
         payload: input.payload,
       },
       {
-        delay: delayMs,     // ✅ időzítés
-        attempts: 3,        // ✅ retry
+        delay: delayMs, // ✅ időzítés
+        attempts: 3, // ✅ retry
         backoff: { type: 'exponential', delay: 2000 }, // ✅ fokozatos visszálkozás
         removeOnComplete: true,
         removeOnFail: false,
@@ -71,16 +78,41 @@ export class NotificationsService {
   /**
    * Azonnali értesítés (delay nélkül).
    */
-  async sendNow(input: { tenantId: string; userId: string; type: string; payload: any }) {
-    const record = await this.prisma.notificationJob.create({
-      data: {
-        tenantId: input.tenantId,
-        userId: input.userId,
-        type: input.type,
-        payload: input.payload,
-        status: 'queued',
-      },
-    });
+  async sendNow(input: {
+    tenantId: string;
+    userId: string;
+    type: string;
+    payload: any;
+    dedupeKey?: string;
+  }) {
+    const workStatus = await this.workSchedule.getStatus(input.tenantId);
+    const scheduledFor = workStatus.allowed ? null : workStatus.nextStart;
+    let record;
+    try {
+      record = await this.prisma.notificationJob.create({
+        data: {
+          tenantId: input.tenantId,
+          userId: input.userId,
+          type: input.type,
+          dedupeKey: input.dedupeKey,
+          payload: input.payload,
+          scheduledFor,
+          status: 'queued',
+        },
+      });
+    } catch (error) {
+      if (
+        input.dedupeKey &&
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        const existing = await this.prisma.notificationJob.findUniqueOrThrow({
+          where: { dedupeKey: input.dedupeKey },
+        });
+        return { ...existing, deduplicated: true };
+      }
+      throw error;
+    }
 
     await this.queue.add(
       'send',
@@ -92,6 +124,9 @@ export class NotificationsService {
         payload: input.payload,
       },
       {
+        delay: scheduledFor
+          ? Math.max(0, scheduledFor.getTime() - Date.now())
+          : undefined,
         attempts: 3,
         backoff: { type: 'exponential', delay: 2000 },
         removeOnComplete: true,
@@ -99,7 +134,7 @@ export class NotificationsService {
       },
     );
 
-    return record;
+    return { ...record, deduplicated: false };
   }
 
   async scheduleBullmqHealthCheck(input: {
@@ -149,6 +184,11 @@ export class NotificationsService {
     type: string;
     payload: any;
   }) {
+    const workStatus = await this.workSchedule.getStatus(input.tenantId);
+    if (!workStatus.allowed) {
+      return this.sendNow(input);
+    }
+
     const record = await this.prisma.notificationJob.create({
       data: {
         tenantId: input.tenantId,

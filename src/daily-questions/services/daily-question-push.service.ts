@@ -18,6 +18,7 @@ export class DailyQuestionPushService {
     tenantId: string,
     userIds: string[],
     payload: { title: string; body: string; data?: Record<string, any> },
+    notificationDateKey: string,
   ) {
     this.logger.log(
       `Push jobok sorba állítása: users=${userIds.length}, title="${payload.title}"`,
@@ -30,13 +31,15 @@ export class DailyQuestionPushService {
           userId,
           type: 'daily_question',
           payload,
+          dedupeKey: `${tenantId}:daily_question:${notificationDateKey}:${userId}`,
         }),
       ),
     );
 
     return {
       success: true,
-      queuedCount: jobs.length,
+      queuedCount: jobs.filter((job: any) => !job.deduplicated).length,
+      deduplicatedCount: jobs.filter((job: any) => job.deduplicated).length,
       payload,
     };
   }

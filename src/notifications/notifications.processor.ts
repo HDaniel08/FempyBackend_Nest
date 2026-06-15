@@ -3,6 +3,9 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { ExpoPushService } from './expo-push.service';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
+import { WorkScheduleService } from '../work-schedule/work-schedule.service';
 
 @Processor('notifications')
 export class NotificationsProcessor extends WorkerHost {
@@ -11,6 +14,8 @@ export class NotificationsProcessor extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService,
     private readonly expoPush: ExpoPushService,
+    private readonly workSchedule: WorkScheduleService,
+    @InjectQueue('notifications') private readonly queue: Queue,
   ) {
     super();
   }
@@ -40,6 +45,30 @@ export class NotificationsProcessor extends WorkerHost {
     }
 
     const { tenantId, userId, payload, notificationJobId } = job.data;
+    const workStatus = await this.workSchedule.getStatus(tenantId);
+
+    if (!workStatus.allowed) {
+      const delay = Math.max(0, workStatus.nextStart.getTime() - Date.now());
+      await this.prisma.notificationJob.update({
+        where: { id: notificationJobId },
+        data: {
+          status: 'queued',
+          scheduledFor: workStatus.nextStart,
+        },
+      });
+      await this.queue.add('send', job.data, {
+        delay,
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 2000 },
+        removeOnComplete: true,
+        removeOnFail: false,
+      });
+      return {
+        deferred: true,
+        notificationJobId,
+        scheduledFor: workStatus.nextStart,
+      };
+    }
 
     const devices = await this.prisma.userDevice.findMany({
       where: { tenantId, userId },
@@ -81,7 +110,10 @@ export class NotificationsProcessor extends WorkerHost {
 
     if (ticketErrors.length > 0) {
       const errorMessage = ticketErrors
-        .map((ticket: any) => `${ticket.details?.error ?? 'ExpoError'}: ${ticket.message}`)
+        .map(
+          (ticket: any) =>
+            `${ticket.details?.error ?? 'ExpoError'}: ${ticket.message}`,
+        )
         .join(' | ');
 
       await this.prisma.notificationJob.update({
