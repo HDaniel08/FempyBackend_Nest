@@ -7,6 +7,12 @@ import { WorkScheduleService } from '../work-schedule/work-schedule.service';
 const MOOD_REMINDER_AFTER_MS = 4 * 60 * 60 * 1000;
 const QUESTION_REMINDER_AFTER_MS = 6 * 60 * 60 * 1000;
 
+type ReminderResult = {
+  tenantId: string;
+  moodQueued: number;
+  questionQueued: number;
+};
+
 @Injectable()
 export class DailyReminderService {
   private readonly logger = new Logger(DailyReminderService.name);
@@ -24,7 +30,7 @@ export class DailyReminderService {
       select: { id: true },
     });
 
-    const results = [];
+    const results: ReminderResult[] = [];
     for (const tenant of tenants) {
       const result = await this.processTenant(tenant.id, now);
       if (result.moodQueued || result.questionQueued) results.push(result);
@@ -47,11 +53,11 @@ export class DailyReminderService {
 
   async processTenant(tenantId: string, now = new Date()) {
     const workStatus = await this.workSchedule.getStatus(tenantId, now);
-    if (
-      !workStatus.allowed ||
-      !('startAt' in workStatus) ||
-      !('endAt' in workStatus)
-    ) {
+    const startAt =
+      'startAt' in workStatus ? workStatus.startAt : undefined;
+    const endAt = 'endAt' in workStatus ? workStatus.endAt : undefined;
+
+    if (!workStatus.allowed || !startAt || !endAt) {
       return { tenantId, moodQueued: 0, questionQueued: 0 };
     }
 
@@ -74,22 +80,20 @@ export class DailyReminderService {
       select: { id: true },
     });
 
-    const moodDueAt = new Date(
-      workStatus.startAt.getTime() + MOOD_REMINDER_AFTER_MS,
-    );
+    const moodDueAt = new Date(startAt.getTime() + MOOD_REMINDER_AFTER_MS);
     const questionDueAt = new Date(
-      workStatus.startAt.getTime() + QUESTION_REMINDER_AFTER_MS,
+      startAt.getTime() + QUESTION_REMINDER_AFTER_MS,
     );
 
     const [moodQueued, questionQueued] = await Promise.all([
-      moodDueAt < workStatus.endAt && now >= moodDueAt
+      moodDueAt < endAt && now >= moodDueAt
         ? this.queueMoodReminders(
             tenantId,
             users.map((user) => user.id),
             workStatus.dateKey,
           )
         : 0,
-      questionDueAt < workStatus.endAt && now >= questionDueAt
+      questionDueAt < endAt && now >= questionDueAt
         ? this.queueQuestionReminders(
             tenantId,
             users.map((user) => user.id),
