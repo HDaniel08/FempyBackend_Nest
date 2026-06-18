@@ -35,6 +35,10 @@ type PushFilters = {
   campaignKey?: string;
 };
 
+const IOS_APP_STORE_URL = 'https://apps.apple.com/hu/app/fempy/id6762603045';
+const ANDROID_PLAY_STORE_URL =
+  'https://play.google.com/store/apps/details?id=com.fempy.rework.app';
+
 @Injectable()
 export class SuperAdminService {
   private readonly logger = new Logger(SuperAdminService.name);
@@ -374,6 +378,8 @@ export class SuperAdminService {
       html: this.buildTestEmailHtml({
         name,
         appDownloadUrl,
+        iosAppStoreUrl: IOS_APP_STORE_URL,
+        androidPlayStoreUrl: ANDROID_PLAY_STORE_URL,
         adminWebUrl,
         hasLogo: !!logoPath,
       }),
@@ -382,6 +388,8 @@ export class SuperAdminService {
 Ez egy Fempy teszt email. Ha ezt az üzenetet megkaptad, az email szolgáltatás működik.
 
 Alkalmazás: ${appDownloadUrl}
+iOS App Store: ${IOS_APP_STORE_URL}
+Android Play Áruház: ${ANDROID_PLAY_STORE_URL}
 Webes felület: ${adminWebUrl}
 
 Fempy csapata`,
@@ -1579,6 +1587,8 @@ Fempy csapata`,
           email: input.email,
           password: input.password,
           appDownloadUrl,
+          iosAppStoreUrl: IOS_APP_STORE_URL,
+          androidPlayStoreUrl: ANDROID_PLAY_STORE_URL,
           adminWebUrl,
           tenantName: input.tenantName,
           hasLogo: !!logoPath,
@@ -1588,6 +1598,8 @@ Fempy csapata`,
           email: input.email,
           password: input.password,
           appDownloadUrl,
+          iosAppStoreUrl: IOS_APP_STORE_URL,
+          androidPlayStoreUrl: ANDROID_PLAY_STORE_URL,
           adminWebUrl,
         }),
         attachments: logoPath
@@ -1611,11 +1623,15 @@ Fempy csapata`,
   private buildTestEmailHtml(input: {
     name: string;
     appDownloadUrl: string;
+    iosAppStoreUrl: string;
+    androidPlayStoreUrl: string;
     adminWebUrl: string;
     hasLogo: boolean;
   }) {
     const name = this.escapeHtml(input.name);
     const appDownloadUrl = this.escapeHtml(input.appDownloadUrl);
+    const iosAppStoreUrl = this.escapeHtml(input.iosAppStoreUrl);
+    const androidPlayStoreUrl = this.escapeHtml(input.androidPlayStoreUrl);
     const adminWebUrl = this.escapeHtml(input.adminWebUrl);
 
     return `
@@ -1650,7 +1666,9 @@ Fempy csapata`,
               <td style="padding:8px 34px 30px;">
                 <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#27364a;">Kedves ${name}!</p>
                 <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#27364a;">Ez egy Fempy teszt email. Ha ezt az üzenetet megkaptad, az email szolgáltatás működik.</p>
-                <table role="presentation" cellpadding="0" cellspacing="0">
+                <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#607089;">Az alkalmazás közvetlenül letölthető az áruházakból:</p>
+                ${this.buildStoreLinksHtml(iosAppStoreUrl, androidPlayStoreUrl)}
+                <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:18px;">
                   <tr>
                     <td style="border-radius:8px;background:#d4145a;">
                       <a href="${appDownloadUrl}" style="display:inline-block;padding:13px 20px;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;">Alkalmazás link</a>
@@ -1681,6 +1699,8 @@ Fempy csapata`,
     email: string;
     password: string;
     appDownloadUrl: string;
+    iosAppStoreUrl: string;
+    androidPlayStoreUrl: string;
     adminWebUrl: string;
     tenantName: string;
     hasLogo: boolean;
@@ -1689,6 +1709,8 @@ Fempy csapata`,
     const email = this.escapeHtml(input.email);
     const password = this.escapeHtml(input.password);
     const appDownloadUrl = this.escapeHtml(input.appDownloadUrl);
+    const iosAppStoreUrl = this.escapeHtml(input.iosAppStoreUrl);
+    const androidPlayStoreUrl = this.escapeHtml(input.androidPlayStoreUrl);
     const adminWebUrl = this.escapeHtml(input.adminWebUrl);
     const tenantName = this.escapeHtml(input.tenantName);
 
@@ -1725,7 +1747,8 @@ Fempy csapata`,
               <td style="padding:8px 36px 0;">
                 <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#27364a;">Kedves ${adminName}!</p>
                 <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#27364a;">Köszönjük megtisztelő érdeklődésed fejlesztésünk iránt. Az alkalmazást jelenleg ingyenes verzióban állítottuk be számodra. Az egy hónapos tesztidőszak alatt munkatársaiddal együtt lehetőségetek lesz kipróbálni többek között például a napi hangulat, napi kérdőív, egyéni fejlesztői és egyszerű riport funkciókat. A használat közbeni visszajelzéseknek örülünk, amelyek alapján a Fempy továbbfejlesztésén folyamatosan dolgozunk.</p>
-                <p style="margin:0 0 22px;font-size:16px;line-height:1.7;color:#27364a;">A letöltést az alábbi linkre kattintva, vagy Play Áruház / App Store-ból közvetlenül is megteheted. A belépéshez kérlek, az alábbi felhasználónevet és jelszót használd.</p>
+                <p style="margin:0 0 14px;font-size:16px;line-height:1.7;color:#27364a;">A Fempy alkalmazást az alábbi áruházi linkeken keresztül töltheted le. A belépéshez kérlek, az alábbi felhasználónevet és jelszót használd.</p>
+                ${this.buildStoreLinksHtml(iosAppStoreUrl, androidPlayStoreUrl)}
               </td>
             </tr>
             <tr>
@@ -1788,6 +1811,8 @@ Fempy csapata`,
     email: string;
     password: string;
     appDownloadUrl: string;
+    iosAppStoreUrl: string;
+    androidPlayStoreUrl: string;
     adminWebUrl: string;
   }) {
     return `Kedves ${input.adminName}!
@@ -1797,6 +1822,8 @@ Köszönjük megtisztelő érdeklődésed fejlesztésünk iránt. Az alkalmazás
 A letöltést az alábbi linkre kattintva, vagy Play Áruház / App Store-ból közvetlenül is megteheted. A belépéshez kérlek, az alábbi felhasználónevet és jelszót használd.
 
 Letöltés: ${input.appDownloadUrl}
+iOS App Store: ${input.iosAppStoreUrl}
+Android Play Áruház: ${input.androidPlayStoreUrl}
 Felhasználónév: ${input.email}
 Jelszó: ${input.password}
 Kérlek, az első belépés után biztonsági okokból változtasd meg a jelszavad.
@@ -1806,6 +1833,26 @@ Link: ${input.adminWebUrl}
 
 Jó felfedezést és sikeres közös fejlődést kívánunk!
 Fempy csapata`;
+  }
+
+  private buildStoreLinksHtml(iosAppStoreUrl: string, androidPlayStoreUrl: string) {
+    return `
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 22px;">
+                  <tr>
+                    <td style="padding:0 10px 10px 0;">
+                      <a href="${iosAppStoreUrl}" style="display:block;width:190px;max-width:100%;border-radius:9px;background:#162033;color:#ffffff;text-decoration:none;padding:10px 14px;border:1px solid #162033;">
+                        <span style="display:block;font-size:11px;line-height:1.2;color:#c8d2df;">Letöltés az</span>
+                        <span style="display:block;margin-top:2px;font-size:17px;line-height:1.2;font-weight:700;">App Store-ból</span>
+                      </a>
+                    </td>
+                    <td style="padding:0 0 10px 0;">
+                      <a href="${androidPlayStoreUrl}" style="display:block;width:190px;max-width:100%;border-radius:9px;background:#162033;color:#ffffff;text-decoration:none;padding:10px 14px;border:1px solid #162033;">
+                        <span style="display:block;font-size:11px;line-height:1.2;color:#c8d2df;">Elérhető itt:</span>
+                        <span style="display:block;margin-top:2px;font-size:17px;line-height:1.2;font-weight:700;">Google Play</span>
+                      </a>
+                    </td>
+                  </tr>
+                </table>`;
   }
 
   private resolveMailLogoPath() {

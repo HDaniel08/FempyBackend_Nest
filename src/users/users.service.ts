@@ -27,6 +27,10 @@ function isValidPresetId(v: any) {
   return ['1', '2', '3', '4', '5', '6', '7'].includes(s);
 }
 
+const IOS_APP_STORE_URL = 'https://apps.apple.com/hu/app/fempy/id6762603045';
+const ANDROID_PLAY_STORE_URL =
+  'https://play.google.com/store/apps/details?id=com.fempy.rework.app';
+
 @Injectable()
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
@@ -835,6 +839,8 @@ export class UsersService {
           email: input.email,
           password: input.password,
           appDownloadUrl,
+          iosAppStoreUrl: IOS_APP_STORE_URL,
+          androidPlayStoreUrl: ANDROID_PLAY_STORE_URL,
           adminWebUrl,
           tenantName: input.tenantName,
           hasLogo: !!logoPath,
@@ -844,6 +850,8 @@ export class UsersService {
           email: input.email,
           password: input.password,
           appDownloadUrl,
+          iosAppStoreUrl: IOS_APP_STORE_URL,
+          androidPlayStoreUrl: ANDROID_PLAY_STORE_URL,
           adminWebUrl,
           tenantName: input.tenantName,
         }),
@@ -904,6 +912,8 @@ export class UsersService {
     const safeEmail = this.escapeHtml(input.email);
     const safePassword = this.escapeHtml(input.password);
     const safeTenantName = this.escapeHtml(input.tenantName);
+    const iosAppStoreUrl = this.escapeHtml(IOS_APP_STORE_URL);
+    const androidPlayStoreUrl = this.escapeHtml(ANDROID_PLAY_STORE_URL);
 
     await this.mail.sendMail({
       to: { email: input.email, name: fullName },
@@ -950,6 +960,8 @@ export class UsersService {
                   </tr>
                 </table>
                 <p style="margin:18px 0 0;font-size:15px;line-height:1.6;color:#607089;">Bejelentkezés után kötelezően meg kell adnod egy új, saját jelszót.</p>
+                <p style="margin:18px 0 12px;font-size:15px;line-height:1.6;color:#607089;">Az alkalmazást innen töltheted le:</p>
+                ${this.buildStoreLinksHtml(iosAppStoreUrl, androidPlayStoreUrl)}
                 <p style="margin:18px 0 0;font-size:14px;line-height:1.6;color:#7b8ba1;">Ha nem te kérted az új jelszót, jelezd a szervezeted adminisztrátorának.</p>
               </td>
             </tr>
@@ -967,6 +979,9 @@ Email: ${input.email}
 Ideiglenes jelszó: ${input.password}
 
 Bejelentkezés után kötelezően meg kell adnod egy új, saját jelszót.
+
+iOS App Store: ${IOS_APP_STORE_URL}
+Android Play Áruház: ${ANDROID_PLAY_STORE_URL}
 
 Ha nem te kérted az új jelszót, jelezd a szervezeted adminisztrátorának.`,
       attachments: logoPath
@@ -986,6 +1001,8 @@ Ha nem te kérted az új jelszót, jelezd a szervezeted adminisztrátorának.`,
     email: string;
     password: string;
     appDownloadUrl: string;
+    iosAppStoreUrl: string;
+    androidPlayStoreUrl: string;
     adminWebUrl: string;
     tenantName: string;
     hasLogo: boolean;
@@ -994,6 +1011,8 @@ Ha nem te kérted az új jelszót, jelezd a szervezeted adminisztrátorának.`,
     const email = this.escapeHtml(input.email);
     const password = this.escapeHtml(input.password);
     const appDownloadUrl = this.escapeHtml(input.appDownloadUrl);
+    const iosAppStoreUrl = this.escapeHtml(input.iosAppStoreUrl);
+    const androidPlayStoreUrl = this.escapeHtml(input.androidPlayStoreUrl);
     const adminWebUrl = this.escapeHtml(input.adminWebUrl);
     const tenantName = this.escapeHtml(input.tenantName);
 
@@ -1030,7 +1049,8 @@ Ha nem te kérted az új jelszót, jelezd a szervezeted adminisztrátorának.`,
               <td style="padding:8px 34px 0;">
                 <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#27364a;">Kedves ${fullName}!</p>
                 <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#27364a;">Meghívást kaptál a Fempy alkalmazásba, ahol egyszerűen tudod használni a napi hangulat, napi kérdőív és egyéni fejlesztői funkciókat.</p>
-                <p style="margin:0 0 22px;font-size:16px;line-height:1.7;color:#27364a;">Az alkalmazást az alábbi linken keresztül töltheted le. A belépéshez használd az alábbi adatokat.</p>
+                <p style="margin:0 0 14px;font-size:16px;line-height:1.7;color:#27364a;">Az alkalmazást az alábbi áruházi linkeken keresztül töltheted le. A belépéshez használd az alábbi adatokat.</p>
+                ${this.buildStoreLinksHtml(iosAppStoreUrl, androidPlayStoreUrl)}
               </td>
             </tr>
             <tr>
@@ -1091,6 +1111,8 @@ Ha nem te kérted az új jelszót, jelezd a szervezeted adminisztrátorának.`,
     email: string;
     password: string;
     appDownloadUrl: string;
+    iosAppStoreUrl: string;
+    androidPlayStoreUrl: string;
     adminWebUrl: string;
     tenantName: string;
   }) {
@@ -1099,6 +1121,8 @@ Ha nem te kérted az új jelszót, jelezd a szervezeted adminisztrátorának.`,
 Meghívást kaptál a Fempy alkalmazásba a(z) ${input.tenantName} csapatához kapcsolódva, ahol egyszerűen tudod használni a napi hangulat, napi kérdőív és egyéni fejlesztői funkciókat.
 
 Letöltés: ${input.appDownloadUrl}
+iOS App Store: ${input.iosAppStoreUrl}
+Android Play Áruház: ${input.androidPlayStoreUrl}
 Felhasználónév: ${input.email}
 Jelszó: ${input.password}
 Kérlek, az első belépés után biztonsági okokból változtasd meg a jelszavad.
@@ -1107,6 +1131,26 @@ Webes felület: ${input.adminWebUrl}
 
 Jó felfedezést és sikeres közös fejlődést kívánunk!
 Fempy csapata`;
+  }
+
+  private buildStoreLinksHtml(iosAppStoreUrl: string, androidPlayStoreUrl: string) {
+    return `
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 22px;">
+                  <tr>
+                    <td style="padding:0 10px 10px 0;">
+                      <a href="${iosAppStoreUrl}" style="display:block;width:190px;max-width:100%;border-radius:9px;background:#162033;color:#ffffff;text-decoration:none;padding:10px 14px;border:1px solid #162033;">
+                        <span style="display:block;font-size:11px;line-height:1.2;color:#c8d2df;">Letöltés az</span>
+                        <span style="display:block;margin-top:2px;font-size:17px;line-height:1.2;font-weight:700;">App Store-ból</span>
+                      </a>
+                    </td>
+                    <td style="padding:0 0 10px 0;">
+                      <a href="${androidPlayStoreUrl}" style="display:block;width:190px;max-width:100%;border-radius:9px;background:#162033;color:#ffffff;text-decoration:none;padding:10px 14px;border:1px solid #162033;">
+                        <span style="display:block;font-size:11px;line-height:1.2;color:#c8d2df;">Elérhető itt:</span>
+                        <span style="display:block;margin-top:2px;font-size:17px;line-height:1.2;font-weight:700;">Google Play</span>
+                      </a>
+                    </td>
+                  </tr>
+                </table>`;
   }
 
   private resolveMailLogoPath() {
