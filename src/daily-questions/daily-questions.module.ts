@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { ScheduleModule } from '@nestjs/schedule';
 import { DailyQuestionsAdminController } from './controllers/daily-questions-admin.controller';
 import { DailyQuestionsUserController } from './controllers/daily-questions-user.controller';
 import { DailyQuestionsService } from './services/daily-questions.service';
@@ -21,7 +20,6 @@ import { WorkScheduleModule } from '../work-schedule/work-schedule.module';
     ActivityModule,
     NotificationsModule,
     WorkScheduleModule,
-    ScheduleModule.forRoot(),
   ],
   controllers: [DailyQuestionsAdminController, DailyQuestionsUserController],
   providers: [

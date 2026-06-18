@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TriggerDailyQuestionDto } from '../dto/trigger-daily-question.dto';
 import { DailyQuestionAudienceService } from './daily-question-audience.service';
@@ -120,27 +121,57 @@ export class DailyQuestionDispatchService {
         this.pushService.buildDefaultPush(schedule.question.topic).body,
     };
 
-    const dispatch = await this.prisma.dailyQuestionDispatch.create({
-      data: {
-        tenantId,
-        questionId: schedule.questionId,
-        scheduleId: schedule.id,
-        campaignKey: schedule.campaignKey,
-        campaignDay: schedule.campaignDay ?? null,
-        triggeredByUserId: input.triggeredByUserId,
-        sentOn,
-        sentAt: new Date(),
-        audienceType: schedule.audienceType,
-        audienceConfig:
-          schedule.audienceConfig === null ||
-          schedule.audienceConfig === undefined
-            ? undefined
-            : (schedule.audienceConfig as any),
-        pushTitle: pushPayload.title,
-        pushBody: pushPayload.body,
-        pushSent: false,
-      },
-    });
+    let dispatch;
+    try {
+      dispatch = await this.prisma.dailyQuestionDispatch.create({
+        data: {
+          tenantId,
+          questionId: schedule.questionId,
+          scheduleId: schedule.id,
+          campaignKey: schedule.campaignKey,
+          campaignDay: schedule.campaignDay ?? null,
+          triggeredByUserId: input.triggeredByUserId,
+          sentOn,
+          sentAt: new Date(),
+          audienceType: schedule.audienceType,
+          audienceConfig:
+            schedule.audienceConfig === null ||
+            schedule.audienceConfig === undefined
+              ? undefined
+              : (schedule.audienceConfig as any),
+          pushTitle: pushPayload.title,
+          pushBody: pushPayload.body,
+          pushSent: false,
+        },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        const existingDispatch =
+          await this.prisma.dailyQuestionDispatch.findFirst({
+            where: {
+              tenantId,
+              scheduleId: schedule.id,
+              sentOn,
+            },
+          });
+
+        if (existingDispatch) {
+          return {
+            dispatch: existingDispatch,
+            recipients: 0,
+            pushResult: {
+              success: true,
+              deduplicated: true,
+            },
+          };
+        }
+      }
+
+      throw error;
+    }
 
     if (targetUsers.length > 0) {
       await this.prisma.dailyQuestionnaireAnswer.createMany({
@@ -172,6 +203,7 @@ export class DailyQuestionDispatchService {
           },
         },
         sentOn.toISOString().slice(0, 10),
+        schedule.id,
       );
 
       await this.prisma.dailyQuestionDispatch.update({

@@ -21,12 +21,14 @@ import { ContentModule } from './content/content.module';
 import { UsageModule } from './usage/usage.module';
 import { MailModule } from './mail/mail.module';
 import { RemindersModule } from './reminders/reminders.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true, // így nem kell minden modulba importálni
     }),
+    ScheduleModule.forRoot(),
     PrismaModule,
     PublicModule,
     HealthModule,

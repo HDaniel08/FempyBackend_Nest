@@ -19,6 +19,7 @@ export class DailyQuestionPushService {
     userIds: string[],
     payload: { title: string; body: string; data?: Record<string, any> },
     notificationDateKey: string,
+    dedupeScope = 'default',
   ) {
     this.logger.log(
       `Push jobok sorba állítása: users=${userIds.length}, title="${payload.title}"`,
@@ -31,7 +32,7 @@ export class DailyQuestionPushService {
           userId,
           type: 'daily_question',
           payload,
-          dedupeKey: `${tenantId}:daily_question:${notificationDateKey}:${userId}`,
+          dedupeKey: `${tenantId}:daily_question:${notificationDateKey}:${dedupeScope}:${userId}`,
         }),
       ),
     );

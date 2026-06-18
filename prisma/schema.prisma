@@ -431,6 +431,7 @@ model DailyQuestionDispatch {
   @@index([tenantId, campaignKey])
   @@index([questionId])
   @@index([scheduleId])
+  @@unique([tenantId, scheduleId, sentOn])
   @@map("daily_question_dispatches")
 }
 
