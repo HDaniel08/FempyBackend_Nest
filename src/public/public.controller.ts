@@ -1,8 +1,16 @@
-import { Controller, Get, Res } from '@nestjs/common';
+import { Controller, Get, Query, Res } from '@nestjs/common';
 import type { Response } from 'express';
+import { AppVersionService } from '../app-version/app-version.service';
 
 @Controller()
 export class PublicController {
+  constructor(private readonly appVersion: AppVersionService) {}
+
+  @Get('app-version')
+  getAppVersion(@Query() query: any) {
+    return this.appVersion.checkClient(query ?? {});
+  }
+
   @Get('privacy')
   getPrivacy(@Res() res: Response) {
     const html = `

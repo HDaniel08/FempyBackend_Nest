@@ -8,6 +8,7 @@ import { ContentModule } from '../content/content.module';
 import { UsageModule } from '../usage/usage.module';
 import { MailModule } from '../mail/mail.module';
 import { DailyQuestionsModule } from '../daily-questions/daily-questions.module';
+import { AppVersionModule } from '../app-version/app-version.module';
 import { SuperAdminController } from './super-admin.controller';
 import { SuperAdminGuard } from './super-admin.guard';
 import { SuperAdminService } from './super-admin.service';
@@ -21,6 +22,7 @@ import { SuperAdminService } from './super-admin.service';
     UsageModule,
     MailModule,
     DailyQuestionsModule,
+    AppVersionModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({

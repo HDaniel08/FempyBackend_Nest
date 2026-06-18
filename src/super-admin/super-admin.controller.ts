@@ -45,6 +45,18 @@ export class SuperAdminController {
   }
 
   @UseGuards(SuperAdminGuard)
+  @Get('app-version')
+  getAppVersionPolicy() {
+    return this.service.getAppVersionPolicy();
+  }
+
+  @UseGuards(SuperAdminGuard)
+  @Patch('app-version')
+  updateAppVersionPolicy(@Body() body: any) {
+    return this.service.updateAppVersionPolicy(body ?? {});
+  }
+
+  @UseGuards(SuperAdminGuard)
   @Get('audit')
   listAudit(@Query() query: any) {
     return this.service.listPlatformAudit(query);

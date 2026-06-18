@@ -18,6 +18,7 @@ import { ActivityMaintenanceService } from '../activity/activity-maintenance.ser
 import { ContentService } from '../content/content.service';
 import { UsageService } from '../usage/usage.service';
 import { MailService } from '../mail/mail.service';
+import { AppVersionService } from '../app-version/app-version.service';
 import Redis from 'ioredis';
 import {
   buildRedisConnectionOptions,
@@ -53,6 +54,7 @@ export class SuperAdminService {
     private readonly content: ContentService,
     private readonly usage: UsageService,
     private readonly mail: MailService,
+    private readonly appVersion: AppVersionService,
   ) {}
 
   async login(input: { email: string; password: string }) {
@@ -87,6 +89,14 @@ export class SuperAdminService {
     });
     if (!admin?.isActive) throw new UnauthorizedException();
     return admin;
+  }
+
+  getAppVersionPolicy() {
+    return this.appVersion.getPolicy();
+  }
+
+  updateAppVersionPolicy(input: Record<string, any>) {
+    return this.appVersion.updatePolicy(input);
   }
 
   async listTenants() {

@@ -81,6 +81,30 @@ model PlatformAdmin {
   @@map("platform_admins")
 }
 
+model AppVersionPolicy {
+  id String @id @default("global")
+
+  minIosVersion     String @default("1.0.8") @map("min_ios_version")
+  minIosBuildNumber Int    @default(9) @map("min_ios_build_number")
+  latestIosVersion  String @default("1.0.8") @map("latest_ios_version")
+  latestIosBuildNumber Int @default(9) @map("latest_ios_build_number")
+  iosStoreUrl       String @default("https://apps.apple.com/hu/app/fempy/id6762603045") @map("ios_store_url")
+
+  minAndroidVersion     String @default("1.0.8") @map("min_android_version")
+  minAndroidVersionCode Int    @default(9) @map("min_android_version_code")
+  latestAndroidVersion  String @default("1.0.8") @map("latest_android_version")
+  latestAndroidVersionCode Int @default(9) @map("latest_android_version_code")
+  androidStoreUrl       String @default("https://play.google.com/store/apps/details?id=com.fempy.rework.app") @map("android_store_url")
+
+  backendVersion     String @default("1.0.0") @map("backend_version")
+  forceUpdateMessage String @default("Az alkalmazas ujabb verzioja szukseges a folytatashoz. Kerlek frissitsd a Fempy appot.") @map("force_update_message")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("app_version_policies")
+}
+
 model SupportSession {
   id              String    @id @default(uuid())
   tenantId        String    @map("tenant_id")
