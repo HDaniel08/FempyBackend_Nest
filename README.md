@@ -64,8 +64,8 @@ SMTP_SOCKET_TIMEOUT_MS=20000
 # Ha ez be van állítva, az API Resend HTTP küldést használ SMTP helyett.
 RESEND_API_KEY="re_xxxxxxxxx"
 
-ADMIN_WEB_URL="http://localhost:5173"
-APP_DOWNLOAD_URL="https://fempyapp.com"
+ADMIN_WEB_URL="https://fempyapp.com"
+APP_DOWNLOAD_URL="https://fempyadmin.pages.dev/"
 ```
 
 Railway Redis esetén általában a jelszót tartalmazó URL-t érdemes átadni:

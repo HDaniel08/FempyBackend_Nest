@@ -13,6 +13,7 @@ import { UserRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { existsSync } from 'fs';
 import { join } from 'path';
+import type Mail from 'nodemailer/lib/mailer';
 import { MailService } from '../mail/mail.service';
 import { randomInt } from 'crypto';
 /**
@@ -30,6 +31,8 @@ function isValidPresetId(v: any) {
 const IOS_APP_STORE_URL = 'https://apps.apple.com/hu/app/fempy/id6762603045';
 const ANDROID_PLAY_STORE_URL =
   'https://play.google.com/store/apps/details?id=com.fempy.rework.app';
+const LINKEDIN_URL = 'https://www.linkedin.com/company/fempy';
+const CONTACT_EMAIL = 'info@fempy.hu';
 
 @Injectable()
 export class UsersService {
@@ -824,12 +827,22 @@ export class UsersService {
     try {
       const fullName = `${input.lastName} ${input.firstName}`.trim();
       const appDownloadUrl =
-        this.config.get<string>('APP_DOWNLOAD_URL') ?? 'https://fempyapp.com';
+        this.config.get<string>('APP_DOWNLOAD_URL') ??
+        'https://fempyadmin.pages.dev/';
       const adminWebUrl =
         this.config.get<string>('ADMIN_WEB_URL') ??
         this.config.get<string>('PUBLIC_BASE_URL') ??
-        'https://fempyadmin.pages.dev/';
+        'https://fempyapp.com';
       const logoPath = this.resolveMailLogoPath();
+      const mailAttachments = [
+        ...this.buildMailAssetAttachments(logoPath),
+        ...this.buildManualAttachments([
+          {
+            filename: 'felhasznaloi-kezikonyv-mobilapp.pdf',
+            fallbackName: 'Fempy-mobilapp-kezikonyv.pdf',
+          },
+        ]),
+      ];
 
       await this.mail.sendMail({
         to: { email: input.email, name: fullName },
@@ -838,7 +851,6 @@ export class UsersService {
           fullName,
           email: input.email,
           password: input.password,
-          appDownloadUrl,
           iosAppStoreUrl: IOS_APP_STORE_URL,
           androidPlayStoreUrl: ANDROID_PLAY_STORE_URL,
           adminWebUrl,
@@ -855,15 +867,7 @@ export class UsersService {
           adminWebUrl,
           tenantName: input.tenantName,
         }),
-        attachments: logoPath
-          ? [
-              {
-                filename: 'fempy-logo.png',
-                path: logoPath,
-                cid: 'fempy-logo',
-              },
-            ]
-          : undefined,
+        attachments: mailAttachments.length ? mailAttachments : undefined,
       });
     } catch (error) {
       this.logger.error(
@@ -914,6 +918,7 @@ export class UsersService {
     const safeTenantName = this.escapeHtml(input.tenantName);
     const iosAppStoreUrl = this.escapeHtml(IOS_APP_STORE_URL);
     const androidPlayStoreUrl = this.escapeHtml(ANDROID_PLAY_STORE_URL);
+    const mailAttachments = this.buildMailAssetAttachments(logoPath);
 
     await this.mail.sendMail({
       to: { email: input.email, name: fullName },
@@ -965,6 +970,7 @@ export class UsersService {
                 <p style="margin:18px 0 0;font-size:14px;line-height:1.6;color:#7b8ba1;">Ha nem te kérted az új jelszót, jelezd a szervezeted adminisztrátorának.</p>
               </td>
             </tr>
+            ${this.buildMailFooterHtml('Ezt az üzenetet azért kaptad, mert új ideiglenes jelszót kértél a Fempy fiókodhoz.')}
           </table>
         </td>
       </tr>
@@ -983,16 +989,8 @@ Bejelentkezés után kötelezően meg kell adnod egy új, saját jelszót.
 iOS App Store: ${IOS_APP_STORE_URL}
 Android Play Áruház: ${ANDROID_PLAY_STORE_URL}
 
-Ha nem te kérted az új jelszót, jelezd a szervezeted adminisztrátorának.`,
-      attachments: logoPath
-        ? [
-            {
-              filename: 'fempy-logo.png',
-              path: logoPath,
-              cid: 'fempy-logo',
-            },
-          ]
-        : undefined,
+Ha nem te kérted az új jelszót, jelezd a szervezeted adminisztrátorának.${this.buildMailTextFooter()}`,
+      attachments: mailAttachments.length ? mailAttachments : undefined,
     });
   }
 
@@ -1000,7 +998,6 @@ Ha nem te kérted az új jelszót, jelezd a szervezeted adminisztrátorának.`,
     fullName: string;
     email: string;
     password: string;
-    appDownloadUrl: string;
     iosAppStoreUrl: string;
     androidPlayStoreUrl: string;
     adminWebUrl: string;
@@ -1010,7 +1007,6 @@ Ha nem te kérted az új jelszót, jelezd a szervezeted adminisztrátorának.`,
     const fullName = this.escapeHtml(input.fullName);
     const email = this.escapeHtml(input.email);
     const password = this.escapeHtml(input.password);
-    const appDownloadUrl = this.escapeHtml(input.appDownloadUrl);
     const iosAppStoreUrl = this.escapeHtml(input.iosAppStoreUrl);
     const androidPlayStoreUrl = this.escapeHtml(input.androidPlayStoreUrl);
     const adminWebUrl = this.escapeHtml(input.adminWebUrl);
@@ -1049,6 +1045,7 @@ Ha nem te kérted az új jelszót, jelezd a szervezeted adminisztrátorának.`,
               <td style="padding:8px 34px 0;">
                 <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#27364a;">Kedves ${fullName}!</p>
                 <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#27364a;">Meghívást kaptál a Fempy alkalmazásba, ahol egyszerűen tudod használni a napi hangulat, napi kérdőív és egyéni fejlesztői funkciókat.</p>
+                <p style="margin:0 0 18px;font-size:15px;line-height:1.6;color:#607089;background:#f8fbff;border:1px solid #d9e3ef;border-radius:10px;padding:14px 16px;"><strong style="color:#162033;">Fontos:</strong> Androidon az alkalmazás használata a regisztrációtól számított 24 órán belül tud elindulni a tesztidőszak aktiválása miatt.</p>
                 <p style="margin:0 0 14px;font-size:16px;line-height:1.7;color:#27364a;">Az alkalmazást az alábbi áruházi linkeken keresztül töltheted le. A belépéshez használd az alábbi adatokat.</p>
                 ${this.buildStoreLinksHtml(iosAppStoreUrl, androidPlayStoreUrl)}
               </td>
@@ -1076,10 +1073,6 @@ Ha nem te kérted az új jelszót, jelezd a szervezeted adminisztrátorának.`,
               <td style="padding:0 34px 10px;">
                 <table role="presentation" cellpadding="0" cellspacing="0">
                   <tr>
-                    <td style="border-radius:8px;background:#d4145a;">
-                      <a href="${appDownloadUrl}" style="display:inline-block;padding:13px 20px;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;">Alkalmazás letöltése</a>
-                    </td>
-                    <td width="12"></td>
                     <td style="border-radius:8px;border:1px solid #b8c6d8;background:#ffffff;">
                       <a href="${adminWebUrl}" style="display:inline-block;padding:12px 18px;color:#26374d;text-decoration:none;font-size:15px;font-weight:700;">Webes felület</a>
                     </td>
@@ -1089,15 +1082,12 @@ Ha nem te kérted az új jelszót, jelezd a szervezeted adminisztrátorának.`,
             </tr>
             <tr>
               <td style="padding:18px 34px 34px;">
+                <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#27364a;">A mobilapp felhasználói kézikönyvét PDF formátumban megtalálod a csatolmányban.</p>
                 <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#27364a;">Jó felfedezést és sikeres közös fejlődést kívánunk!</p>
                 <p style="margin:0;font-size:16px;line-height:1.7;color:#27364a;font-weight:700;">Fempy csapata</p>
               </td>
             </tr>
-            <tr>
-              <td style="padding:18px 34px;background:#eef3f8;color:#7b8ba1;font-size:12px;line-height:1.5;">
-                Ezt az üzenetet azért kaptad, mert meghívást kaptál a Fempy alkalmazásba.
-              </td>
-            </tr>
+            ${this.buildMailFooterHtml('Ezt az üzenetet azért kaptad, mert meghívást kaptál a Fempy alkalmazásba.')}
           </table>
         </td>
       </tr>
@@ -1120,6 +1110,8 @@ Ha nem te kérted az új jelszót, jelezd a szervezeted adminisztrátorának.`,
 
 Meghívást kaptál a Fempy alkalmazásba a(z) ${input.tenantName} csapatához kapcsolódva, ahol egyszerűen tudod használni a napi hangulat, napi kérdőív és egyéni fejlesztői funkciókat.
 
+Fontos: Androidon az alkalmazás használata a regisztrációtól számított 24 órán belül tud elindulni a tesztidőszak aktiválása miatt.
+
 Letöltés: ${input.appDownloadUrl}
 iOS App Store: ${input.iosAppStoreUrl}
 Android Play Áruház: ${input.androidPlayStoreUrl}
@@ -1129,39 +1121,154 @@ Kérlek, az első belépés után biztonsági okokból változtasd meg a jelszav
 
 Webes felület: ${input.adminWebUrl}
 
+A mobilapp felhasználói kézikönyvét PDF formátumban megtalálod a csatolmányban.
+
 Jó felfedezést és sikeres közös fejlődést kívánunk!
-Fempy csapata`;
+Fempy csapata${this.buildMailTextFooter()}`;
   }
 
-  private buildStoreLinksHtml(iosAppStoreUrl: string, androidPlayStoreUrl: string) {
+  private buildStoreLinksHtml(
+    iosAppStoreUrl: string,
+    androidPlayStoreUrl: string,
+  ) {
     return `
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 22px;">
                   <tr>
                     <td style="padding:0 10px 10px 0;">
-                      <a href="${iosAppStoreUrl}" style="display:block;width:190px;max-width:100%;border-radius:9px;background:#162033;color:#ffffff;text-decoration:none;padding:10px 14px;border:1px solid #162033;">
-                        <span style="display:block;font-size:11px;line-height:1.2;color:#c8d2df;">Letöltés az</span>
-                        <span style="display:block;margin-top:2px;font-size:17px;line-height:1.2;font-weight:700;">App Store-ból</span>
+                      <a href="${iosAppStoreUrl}" style="display:block;width:190px;max-width:100%;text-decoration:none;">
+                        <img src="cid:fempy-appstore-badge" width="190" alt="Letöltés az App Store-ból" style="display:block;width:190px;max-width:100%;height:auto;border:0;">
                       </a>
                     </td>
                     <td style="padding:0 0 10px 0;">
-                      <a href="${androidPlayStoreUrl}" style="display:block;width:190px;max-width:100%;border-radius:9px;background:#162033;color:#ffffff;text-decoration:none;padding:10px 14px;border:1px solid #162033;">
-                        <span style="display:block;font-size:11px;line-height:1.2;color:#c8d2df;">Elérhető itt:</span>
-                        <span style="display:block;margin-top:2px;font-size:17px;line-height:1.2;font-weight:700;">Google Play</span>
+                      <a href="${androidPlayStoreUrl}" style="display:block;width:190px;max-width:100%;text-decoration:none;">
+                        <img src="cid:fempy-playstore-badge" width="190" alt="Elérhető itt: Google Play" style="display:block;width:190px;max-width:100%;height:auto;border:0;">
                       </a>
                     </td>
                   </tr>
                 </table>`;
   }
 
+  private buildMailFooterHtml(note: string) {
+    return `
+            <tr>
+              <td style="padding:20px 34px;background:#eef3f8;border-top:1px solid #dce6f1;color:#7b8ba1;font-size:12px;line-height:1.5;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td style="padding:0;vertical-align:middle;color:#7b8ba1;font-size:12px;line-height:1.5;">
+                      <div style="margin:0 0 8px;">${note}</div>
+                      <div style="margin:0;">
+                        Kapcsolat:
+                        <a href="mailto:${CONTACT_EMAIL}" style="color:#d4145a;text-decoration:none;font-weight:700;">${CONTACT_EMAIL}</a>
+                      </div>
+                    </td>
+                    <td align="right" style="padding:0 0 0 18px;vertical-align:middle;white-space:nowrap;">
+                      <a href="${LINKEDIN_URL}" style="display:inline-block;text-decoration:none;">
+                        <img src="cid:fempy-linkedin-icon" width="24" height="24" alt="Fempy LinkedIn" style="display:block;width:24px;height:24px;border:0;">
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>`;
+  }
+
+  private buildMailTextFooter() {
+    return `
+
+Kapcsolat: ${CONTACT_EMAIL}
+LinkedIn: ${LINKEDIN_URL}`;
+  }
+
   private resolveMailLogoPath() {
     const configuredPath = this.config.get<string>('MAIL_LOGO_PATH');
+    return configuredPath && existsSync(configuredPath)
+      ? configuredPath
+      : this.resolveMailAssetPath('logo.png');
+  }
+
+  private resolveMailAssetPath(filename: string) {
     const candidates = [
-      configuredPath,
-      join(process.cwd(), 'dist', 'src', 'mail', 'assets', 'logo.png'),
-      join(process.cwd(), 'src', 'mail', 'assets', 'logo.png'),
-    ].filter(Boolean) as string[];
+      join(process.cwd(), 'dist', 'src', 'mail', 'assets', filename),
+      join(process.cwd(), 'src', 'mail', 'assets', filename),
+    ];
 
     return candidates.find((path) => existsSync(path)) ?? null;
+  }
+
+  private resolveMailAttachmentPath(filename: string) {
+    const candidates = [
+      join(process.cwd(), 'dist', 'src', 'mail', 'attachments', filename),
+      join(process.cwd(), 'src', 'mail', 'attachments', filename),
+    ];
+
+    return candidates.find((path) => existsSync(path)) ?? null;
+  }
+
+  private buildManualAttachments(
+    manuals: Array<{ filename: string; fallbackName: string }>,
+  ): Mail.Attachment[] {
+    const attachments: Mail.Attachment[] = [];
+
+    for (const { filename, fallbackName } of manuals) {
+      const path = this.resolveMailAttachmentPath(filename);
+
+      if (path) {
+        attachments.push({
+          filename: fallbackName,
+          path,
+          contentType: 'application/pdf',
+        });
+      }
+    }
+
+    return attachments;
+  }
+
+  private buildMailAssetAttachments(
+    logoPath: string | null,
+  ): Mail.Attachment[] {
+    const attachments: Mail.Attachment[] = [];
+
+    if (logoPath) {
+      attachments.push({
+        filename: 'fempy-logo.png',
+        path: logoPath,
+        cid: 'fempy-logo',
+      });
+    }
+
+    const appStorePath = this.resolveMailAssetPath('appstore.svg');
+    const playStorePath = this.resolveMailAssetPath('playstore.svg');
+    const linkedInPath = this.resolveMailAssetPath('linkedin.png');
+
+    if (appStorePath) {
+      attachments.push({
+        filename: 'appstore.svg',
+        path: appStorePath,
+        cid: 'fempy-appstore-badge',
+        contentType: 'image/svg+xml',
+      });
+    }
+
+    if (playStorePath) {
+      attachments.push({
+        filename: 'playstore.svg',
+        path: playStorePath,
+        cid: 'fempy-playstore-badge',
+        contentType: 'image/svg+xml',
+      });
+    }
+
+    if (linkedInPath) {
+      attachments.push({
+        filename: 'linkedin.png',
+        path: linkedInPath,
+        cid: 'fempy-linkedin-icon',
+        contentType: 'image/png',
+      });
+    }
+
+    return attachments;
   }
 
   private escapeHtml(value: string) {

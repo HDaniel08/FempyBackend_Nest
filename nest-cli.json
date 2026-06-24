@@ -8,6 +8,10 @@
       {
         "include": "mail/assets/**/*",
         "outDir": "dist/src"
+      },
+      {
+        "include": "mail/attachments/**/*",
+        "outDir": "dist/src"
       }
     ]
   }
