@@ -1134,14 +1134,14 @@ Fempy csapata${this.buildMailTextFooter()}`;
     return `
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 22px;">
                   <tr>
-                    <td style="padding:0 10px 10px 0;">
-                      <a href="${iosAppStoreUrl}" style="display:block;width:190px;max-width:100%;text-decoration:none;">
-                        <img src="cid:fempy-appstore-badge" width="190" alt="Letöltés az App Store-ból" style="display:block;width:190px;max-width:100%;height:auto;border:0;">
+                    <td style="padding:0 10px 10px 0;vertical-align:top;">
+                      <a href="${iosAppStoreUrl}" style="display:block;width:184px;max-width:100%;text-decoration:none;">
+                        <img src="cid:fempy-appstore-badge" width="184" height="50" alt="Letöltés az App Store-ból" style="display:block;width:184px;max-width:100%;height:50px;border:0;">
                       </a>
                     </td>
-                    <td style="padding:0 0 10px 0;">
-                      <a href="${androidPlayStoreUrl}" style="display:block;width:190px;max-width:100%;text-decoration:none;">
-                        <img src="cid:fempy-playstore-badge" width="190" alt="Elérhető itt: Google Play" style="display:block;width:190px;max-width:100%;height:auto;border:0;">
+                    <td style="padding:0 0 10px 0;vertical-align:top;">
+                      <a href="${androidPlayStoreUrl}" style="display:block;width:169px;max-width:100%;text-decoration:none;">
+                        <img src="cid:fempy-playstore-badge" width="169" height="50" alt="Elérhető itt: Google Play" style="display:block;width:169px;max-width:100%;height:50px;border:0;">
                       </a>
                     </td>
                   </tr>
